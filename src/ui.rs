@@ -177,17 +177,28 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
+// ─── Explorer helpers ─────────────────────────────────────────────────────────
+
+fn explorer_label(app: &App, p: &std::path::Path) -> String {
+    // If this path is the parent of current_dir, show "../"
+    if app.current_dir.parent().map(|par| par == p).unwrap_or(false) {
+        return "  ../".to_string();
+    }
+    let name = p.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if p.is_dir() { format!("  {}/", name) } else { format!("  {}", name) }
+}
+
 // ─── Panels ───────────────────────────────────────────────────────────────────
 
 fn draw_panel_open(f: &mut Frame, app: &mut App, size: Rect) {
     let panel = centered_rect(50, 60, size);
     f.render_widget(Clear, panel);
 
-    let items: Vec<ListItem> = app.explorer_entries.iter().map(|p| {
-        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let label = if p.is_dir() { format!("  {}/", name) } else { format!("  {}", name) };
-        ListItem::new(label)
-    }).collect();
+    let items: Vec<ListItem> = app.explorer_entries.iter()
+        .map(|p| ListItem::new(explorer_label(app, p)))
+        .collect();
 
     let list = List::new(items)
         .block(Block::default()
@@ -215,11 +226,9 @@ fn draw_panel_save_as(f: &mut Frame, app: &App, size: Rect) {
         .split(panel);
 
     // ── Explorer ──────────────────────────────────────────────────────────────
-    let items: Vec<ListItem> = app.explorer_entries.iter().map(|p| {
-        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let label = if p.is_dir() { format!("  {}/", name) } else { format!("  {}", name) };
-        ListItem::new(label)
-    }).collect();
+    let items: Vec<ListItem> = app.explorer_entries.iter()
+        .map(|p| ListItem::new(explorer_label(app, p)))
+        .collect();
 
     let explorer_border = if app.save_as_input_focused {
         Style::default().fg(PANEL_BORDER)
