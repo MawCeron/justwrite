@@ -98,7 +98,7 @@ impl App {
         let mut pos = 0usize;
         while pos <= len {
             if pos == len {
-                lines.push(VisualLine { buf_start: pos, buf_end: pos, hard_break: false });
+                lines.push(VisualLine { buf_start: pos, buf_end: pos });
                 break;
             }
             let newline_pos = buf[pos..].iter().position(|&c| c == '\n').map(|i| pos + i);
@@ -111,7 +111,6 @@ impl App {
                     lines.push(VisualLine {
                         buf_start: seg_start,
                         buf_end:   logical_end,
-                        hard_break: newline_pos.is_some(),
                     });
                     break;
                 }
@@ -119,7 +118,7 @@ impl App {
                     .iter().rposition(|&c| c == ' ')
                     .map(|i| i + 1)
                     .unwrap_or(width);
-                lines.push(VisualLine { buf_start: seg_start, buf_end: seg_start + wrap_at, hard_break: false });
+                lines.push(VisualLine { buf_start: seg_start, buf_end: seg_start + wrap_at });
                 seg_start += wrap_at;
             }
 
@@ -127,7 +126,7 @@ impl App {
         }
 
         if lines.is_empty() {
-            lines.push(VisualLine { buf_start: 0, buf_end: 0, hard_break: false });
+            lines.push(VisualLine { buf_start: 0, buf_end: 0 });
         }
         lines
     }
@@ -567,6 +566,11 @@ impl App {
             (false, true) => std::cmp::Ordering::Greater,
             _ => a.file_name().cmp(&b.file_name()),
         });
+
+        // Prepend ".." unless we're already at the filesystem root
+        if let Some(parent) = self.current_dir.parent() {
+            entries.insert(0, parent.to_path_buf());
+        }
 
         self.explorer_entries = entries;
         self.explorer_state   = ListState::default();

@@ -15,7 +15,6 @@ pub enum Mode {
 pub struct VisualLine {
     pub buf_start: usize,
     pub buf_end:   usize,
-    pub hard_break: bool,
 }
 
 // ─── Undo/redo ────────────────────────────────────────────────────────────────
