@@ -1,0 +1,15 @@
+[package]
+name = "justwrite"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "justwrite"
+
+[dependencies]
+crossterm = "0.27"
+ratatui = "0.26"
+arboard = { version = "3", optional = true }
+
+[features]
+system-clipboard = ["arboard"]
