@@ -25,7 +25,33 @@ shortcut; you learn them once and they disappear.
 It is one static binary with no cgo and no display server, so it runs anywhere
 you can open a terminal — including a headless writerdeck.
 
-## Quick Start
+## Install
+
+Packages and binaries for Linux, macOS and Windows are on the
+[releases page](https://github.com/MawCeron/justwrite/releases), for both x86-64
+and ARM. Swap `amd64` for `arm64` below on a Raspberry Pi or an Apple Silicon
+Mac.
+
+Debian, Ubuntu:
+
+```bash
+sudo dpkg -i justwrite_*_linux_amd64.deb
+```
+
+Fedora, RHEL, openSUSE:
+
+```bash
+sudo rpm -i justwrite_*_linux_amd64.rpm
+```
+
+Anywhere else, unpack the archive and put the binary on your `$PATH`:
+
+```bash
+tar xzf justwrite_*_linux_amd64.tar.gz
+sudo install justwrite /usr/local/bin/
+```
+
+With Go, from source:
 
 ```bash
 go install github.com/MawCeron/justwrite@latest
@@ -39,7 +65,13 @@ cd justwrite
 go build .
 ```
 
-Then:
+To build for a writing device you are not on, such as an ARM writerdeck:
+
+```bash
+GOOS=linux GOARCH=arm64 go build .
+```
+
+## Usage
 
 ```bash
 justwrite              # a new document
@@ -48,12 +80,6 @@ justwrite draft.md     # open a file, or start one under that name
 
 Naming a file that does not exist yet is how you start one: the name sticks, and
 `Ctrl+S` saves straight to it.
-
-For a writing device you are not building on, such as an ARM writerdeck:
-
-```bash
-GOOS=linux GOARCH=arm64 go build .
-```
 
 ## Keyboard shortcuts
 
