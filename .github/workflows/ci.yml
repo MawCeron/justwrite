@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+      # The race detector needs cgo, which is not available on every runner.
+      - name: Race
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -race ./...
+
+      - name: Formatting
+        if: matrix.os == 'ubuntu-latest'
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      # justwrite is meant to run on a headless writing device, which is rarely
+      # the machine anyone develops on. Catch a broken cross-build here rather
+      # than at release.
+      - name: Cross-compile for a writerdeck
+        if: matrix.os == 'ubuntu-latest'
+        run: GOOS=linux GOARCH=arm64 go build -o /dev/null .
+
+  screens:
+    # The README claims its screens cannot fall out of date with the interface.
+    # This is what makes that true: regenerate them and fail if anything moved.
+    #
+    # ansisvg is pinned rather than @latest — a new release of it would change
+    # the SVG it emits and turn this red on a commit that touched nothing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: go install github.com/wader/ansisvg@v0.5.0
+
+      - run: ./assets/screens.sh
+
+      - name: Screens are current
+        run: |
+          if [ -n "$(git status --porcelain -- assets)" ]; then
+            echo "::error::assets/*.svg no longer match the interface — run ./assets/screens.sh and commit the result"
+            git status --short -- assets
+            git diff --stat -- assets
+            exit 1
+          fi
