@@ -1,0 +1,5 @@
+justwrite
+justwrite.exe
+*.tmp
+assets/tapes/bin/
+.claude/

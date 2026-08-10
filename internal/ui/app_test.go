@@ -1,0 +1,249 @@
+package ui
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func testApp(t *testing.T) App {
+	t.Helper()
+	a, err := NewApp("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.w, a.h = 80, 24
+	return a
+}
+
+func press(a App, msg tea.KeyMsg) (App, tea.Cmd) {
+	m, cmd := a.Update(msg)
+	return m.(App), cmd
+}
+
+func typeRunes(a App, s string) App {
+	for _, r := range s {
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	return a
+}
+
+// A quit usually travels batched with the window-title command, so look inside.
+func isQuit(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	switch msg := cmd().(type) {
+	case tea.QuitMsg:
+		return true
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if isQuit(c) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestQuitAsksOnlyWhenThereIsSomethingToLose(t *testing.T) {
+	t.Run("a clean document quits", func(t *testing.T) {
+		_, cmd := press(testApp(t), tea.KeyMsg{Type: tea.KeyCtrlQ})
+
+		if !isQuit(cmd) {
+			t.Error("ctrl+q on a clean document did not quit")
+		}
+	})
+
+	t.Run("an edited document asks first", func(t *testing.T) {
+		a := typeRunes(testApp(t), "hola")
+
+		a, cmd := press(a, tea.KeyMsg{Type: tea.KeyCtrlQ})
+
+		if a.mode != ModeConfirm {
+			t.Errorf("mode = %v, want ModeConfirm", a.mode)
+		}
+		if isQuit(cmd) {
+			t.Error("ctrl+q quit without waiting for the answer")
+		}
+	})
+}
+
+// Opening a file replaces the buffer. Every way of losing unsaved work has to
+// ask first, and this is one of them.
+func TestOpenAsksBeforeDiscardingChanges(t *testing.T) {
+	a := typeRunes(testApp(t), "un borrador")
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlO})
+
+	if a.mode != ModeConfirm {
+		t.Fatalf("mode = %v, want ModeConfirm", a.mode)
+	}
+	if got := a.ed.Text(); got != "un borrador" {
+		t.Errorf("the draft was touched: %q", got)
+	}
+}
+
+func TestAnsweringNoKeepsTheDraft(t *testing.T) {
+	a := typeRunes(testApp(t), "hola")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlO})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v, want ModeWrite", a.mode)
+	}
+	if got := a.ed.Text(); got != "hola" {
+		t.Errorf("document = %q, want it untouched", got)
+	}
+}
+
+func TestAnsweringYesRunsTheAction(t *testing.T) {
+	a := typeRunes(testApp(t), "hola")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlN})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if got := a.ed.Text(); got != "" {
+		t.Errorf("document = %q, want a blank one", got)
+	}
+}
+
+func TestHelpAndAbout(t *testing.T) {
+	a, _ := press(testApp(t), tea.KeyMsg{Type: tea.KeyF1})
+	if a.mode != ModeHelp {
+		t.Fatalf("f1 gave mode %v, want ModeHelp", a.mode)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if a.mode != ModeAbout {
+		t.Errorf("? in help gave mode %v, want ModeAbout", a.mode)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != ModeWrite {
+		t.Errorf("esc gave mode %v, want ModeWrite", a.mode)
+	}
+}
+
+// ? is a character before it is a shortcut: this is an editor.
+func TestQuestionMarkTypesWhileWriting(t *testing.T) {
+	a := typeRunes(testApp(t), "¿qué?")
+
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v, want to still be writing", a.mode)
+	}
+	if got := a.ed.Text(); got != "¿qué?" {
+		t.Errorf("document = %q", got)
+	}
+}
+
+// A save that fails without saying so is a draft lost quietly.
+func TestAFailedSaveShowsUpOnTheBar(t *testing.T) {
+	a := testApp(t)
+	a.ed.Path = t.TempDir() // a directory can never be written as a file
+	a = typeRunes(a, "hola")
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	if !a.statusErr || a.status == "" {
+		t.Fatalf("statusErr=%v status=%q, want the reason on the bar", a.statusErr, a.status)
+	}
+	if !a.ed.Modified {
+		t.Error("the document was marked saved even though the save failed")
+	}
+}
+
+func TestSavingAKnownFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	a := testApp(t)
+	a.ed.Path = path
+	a = typeRunes(a, "hola")
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	if a.statusErr {
+		t.Fatalf("save reported an error: %q", a.status)
+	}
+	if b, err := os.ReadFile(path); err != nil || string(b) != "hola" {
+		t.Errorf("file = %q (%v)", b, err)
+	}
+	if a.status != "saved" {
+		t.Errorf("status = %q, want %q", a.status, "saved")
+	}
+}
+
+// A document with no name asks for one instead of failing quietly.
+func TestSavingAnUnnamedDocumentOpensTheDialog(t *testing.T) {
+	a := typeRunes(testApp(t), "hola")
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	if a.mode != ModeSaveAs {
+		t.Errorf("mode = %v, want ModeSaveAs", a.mode)
+	}
+	if !a.onName {
+		t.Error("focus should start in the filename field, which is what you pressed save to fill in")
+	}
+}
+
+// Home, End and PageUp all index into the rows of the page, so a terminal too
+// narrow to hold any text still has to produce one. If that guard ever goes,
+// this test panics rather than fails.
+func TestANarrowTerminalDoesNotPanic(t *testing.T) {
+	for _, size := range [][2]int{{1, 1}, {5, 3}, {12, 10}, {29, 9}, {30, 10}, {80, 24}} {
+		a := testApp(t)
+		a.w, a.h = size[0], size[1]
+		a = typeRunes(a, "hola mundo, un texto que no cabe")
+
+		for _, k := range []tea.KeyType{
+			tea.KeyHome, tea.KeyEnd, tea.KeyPgUp, tea.KeyPgDown,
+			tea.KeyUp, tea.KeyDown, tea.KeyLeft, tea.KeyRight,
+		} {
+			a, _ = press(a, tea.KeyMsg{Type: k})
+		}
+		_ = a.View()
+	}
+}
+
+// A document is modified when its text changes, and at no other time. Keys
+// that write nothing must not put a * on the bar — on Windows a bare Shift or
+// Ctrl arrives as a key event carrying a NUL rune, and an alt chord is a
+// command, not a character.
+func TestKeysThatWriteNothingDoNotModifyTheDocument(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		msg  tea.KeyMsg
+	}{
+		{"a bare modifier", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0}}},
+		{"an alt chord", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true}},
+		{"an unbound function key", tea.KeyMsg{Type: tea.KeyF5}},
+		{"an unbound ctrl chord", tea.KeyMsg{Type: tea.KeyCtrlW}},
+		{"help", tea.KeyMsg{Type: tea.KeyF1}},
+		{"a cursor move", tea.KeyMsg{Type: tea.KeyRight}},
+		{"select all on an empty document", tea.KeyMsg{Type: tea.KeyCtrlA}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := press(testApp(t), c.msg)
+
+			if a.ed.Modified {
+				t.Errorf("the document is marked modified after %q", c.msg.String())
+			}
+			if got := a.ed.Text(); got != "" {
+				t.Errorf("the document gained %q", got)
+			}
+		})
+	}
+}
+
+func TestTypingIsNotSwallowedByPanels(t *testing.T) {
+	a, _ := press(testApp(t), tea.KeyMsg{Type: tea.KeyCtrlT})
+
+	a = typeRunes(a, "hola")
+
+	if got := a.ed.Text(); got != "" {
+		t.Errorf("keys reached the document through the stats panel: %q", got)
+	}
+}

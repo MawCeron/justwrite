@@ -1,0 +1,4 @@
+# Scripts and tapes must keep LF, or bash refuses them after a Windows checkout.
+* text=auto
+*.sh text eol=lf
+*.tape text eol=lf
