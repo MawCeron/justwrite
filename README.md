@@ -49,13 +49,10 @@ justwrite draft.md     # open a file, or start one under that name
 Naming a file that does not exist yet is how you start one: the name sticks, and
 `Ctrl+S` saves straight to it.
 
-On the machine you write on, that is all of it — `go build .` produces the
-binary for the machine it ran on. `GOOS`/`GOARCH` only come into it when the
-writing device is *not* the machine you build on, such as an ARM writerdeck
-built from a laptop:
+For a writing device you are not building on, such as an ARM writerdeck:
 
 ```bash
-GOOS=linux GOARCH=arm64 go build .   # for an ARM device, from elsewhere
+GOOS=linux GOARCH=arm64 go build .
 ```
 
 ## Keyboard shortcuts
@@ -80,8 +77,7 @@ GOOS=linux GOARCH=arm64 go build .   # for an ARM device, from elsewhere
 
 Undo works in bursts: one `Ctrl+Z` takes back a word, not a letter.
 
-`F1` puts the whole list on screen, over the page rather than instead of it, and
-`?` from there opens About:
+`F1` puts the whole list on screen, and `?` from there opens About:
 
 ![The help panel floating over the page, two columns of shortcuts](assets/help.svg)
 
@@ -101,10 +97,8 @@ Undo works in bursts: one `Ctrl+Z` takes back a word, not a letter.
 
 ![The open dialog listing a writing directory, directories first](assets/dialog.svg)
 
-Binary files stay out of the listing by default — opening a PNG only fills the
-page with control characters, and neither the `cover.png` nor the `.draft.swp`
-in that directory is shown. Stepping up to the parent leaves the cursor on the
-directory you came out of.
+Binary files and dotfiles stay out of the listing by default. Stepping up to the
+parent leaves the cursor on the directory you came out of.
 
 Anything that would throw away unsaved work — quitting, starting a new document,
 opening another file, saving over an existing one — asks first.
@@ -128,10 +122,9 @@ opening another file, saving over an existing one — asks first.
 renamed into place, so an interrupted or failed save leaves the previous draft
 intact rather than a half-written file.
 
-**The clipboard travels.** Copy and cut go through OSC 52, an escape sequence
-the terminal emulator handles itself, so copying works over SSH and inside tmux
-with no display server. For tmux, add `set -g set-clipboard on`. Pasting from
-outside arrives as a bracketed paste and lands as a single undo step.
+**The clipboard travels.** Copying works over SSH and inside tmux, with no
+display server. For tmux, add `set -g set-clipboard on`. Text pasted in from
+elsewhere lands as a single undo step.
 
 **Colours are optional.** `NO_COLOR` is honoured, and the layout carries the
 meaning on its own.
@@ -150,8 +143,8 @@ justwrite/
 └── main.go
 ```
 
-`internal/editor` does not import Bubble Tea. It is plain logic over a rune
-buffer, which is why most of the tests live there and run in milliseconds.
+`internal/editor` does not import Bubble Tea; it is the document on its own,
+and most of the tests live there.
 
 ## Contributing
 
