@@ -1,75 +1,125 @@
 package ui
 
 import (
-	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
-	"github.com/MawCeron/justwrite/internal/editor"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 )
 
-// TestPreview is a hand-run frame dump: go test -run TestPreview -v
+// TestPreview writes one frame per screen to assets/frames/*.ans, which
+// assets/screens.sh turns into the SVGs in the README. It is skipped unless
+// PREVIEW=1, so an ordinary `go test ./...` never writes anything.
+//
+// These frames are the real View() output, byte for byte what the terminal is
+// handed — not a mock-up. What they are not is a recording of a live PTY; the
+// animated demo still needs VHS.
 func TestPreview(t *testing.T) {
 	if os.Getenv("PREVIEW") == "" {
-		t.Skip("set PREVIEW=1")
+		t.Skip("set PREVIEW=1 to write assets/frames")
 	}
 	// go test hands the binary a pipe, so lipgloss would drop every colour.
-	// Force them on: the point of looking is to look at the colours.
 	lipgloss.SetColorProfile(termenv.TrueColor)
-	sample := "El cursor está aquí y nada más existe. " +
-		"Esta línea es lo bastante larga como para que el ajuste por palabra tenga que partirla en varias filas de la página, que nunca pasa de 82 columnas por más ancha que sea la terminal.\n\nSegundo párrafo."
 
-	frame := func(label string, build func(App) App) {
-		a := App{ed: newEditorWith(sample), w: 80, h: 20}
-		a.name = testApp(t).name
-		a = build(a)
-		fmt.Printf("\n=== %s ===\n%s\n", label, a.View())
+	// Anchored to this source file, not the working directory: a compiled test
+	// binary run from the repo root would otherwise write two levels above it.
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate the source file to write beside")
+	}
+	out := filepath.Join(filepath.Dir(thisFile), "..", "..", "assets", "frames")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
 	}
 
-	frame("writing", func(a App) App { a.ed.Path = "borrador.md"; a.ed.Modified = true; return a })
-	frame("saved message", func(a App) App { a.ed.Path = "borrador.md"; a.status = "saved"; return a })
-	frame("save failed", func(a App) App {
-		a.ed.Path = "borrador.md"
-		a.status, a.statusErr = "open /ro/borrador.md: permission denied", true
-		return a
-	})
-	frame("help", func(a App) App { a.mode = ModeHelp; return a })
-	frame("about", func(a App) App { a.mode = ModeAbout; return a })
-	frame("stats", func(a App) App { a.mode = ModeStats; return a })
-	frame("confirm", func(a App) App {
-		a.mode = ModeConfirm
-		a.confirm = confirmation{message: "discard changes?"}
-		return a
-	})
-	frame("open", func(a App) App {
-		a.mode = ModeOpen
-		a.exp.refresh(".", "")
-		return a
-	})
-	frame("save as", func(a App) App {
-		a.mode = ModeSaveAs
-		a.onName = true
-		a.exp.refresh(".", "")
-		a.name.SetValue("capitulo-01.md")
-		return a
-	})
+	write := func(name string, a App) {
+		t.Helper()
+		path := filepath.Join(out, name+".ans")
+		if err := os.WriteFile(path, []byte(a.View()+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %s", path)
+	}
 
-	// The floor: a tmux split and a terminal below the minimum.
-	narrow := App{ed: newEditorWith(sample), w: 60, h: 18, name: testApp(t).name}
-	fmt.Printf("\n=== 60 columns ===\n%s\n", narrow.View())
-	tiny := App{ed: newEditorWith(sample), w: 24, h: 8, name: testApp(t).name}
-	fmt.Printf("\n=== 24x8 ===\n%s\n", tiny.View())
+	// Wide enough that the page is visibly narrower than the terminal: the
+	// measure caps at 82 columns however much room there is, and a screenshot
+	// at exactly 82 would hide that.
+	const w, h = 104, 30
 
-	// And a key actually landing, through the real Update path.
-	a, _ := press(testApp(t), tea.KeyMsg{Type: tea.KeyF1})
-	fmt.Printf("\n=== f1 via Update ===\n%s\n", a.View())
+	scene := func() App {
+		a := testApp(t) // a real App, built the way main builds it
+		a.w, a.h = w, h
+		a.ed.SetText(lorem)
+		a.ed.Path = "lorem.md"
+		a.ed.Modified = true
+		return a
+	}
+
+	write("writing", scene())
+
+	help := scene()
+	help.mode = ModeHelp
+	write("help", help)
+
+	about := scene()
+	about.mode = ModeAbout
+	write("about", about)
+
+	stats := scene()
+	stats.mode = ModeStats
+	write("stats", stats)
+
+	confirm := scene()
+	confirm.mode = ModeConfirm
+	confirm.confirm = confirmation{message: "discard changes?"}
+	write("confirm", confirm)
+
+	dialog := scene()
+	dialog.mode = ModeOpen
+	dialog.exp.refresh(fixtureDir(t), "")
+	// The listing is real, read off disk. Only the label is staged: the true
+	// path is a throwaway temp directory, and putting it on camera would both
+	// look like noise and publish somebody's home directory layout.
+	dialog.exp.dir = "/home/you/writing"
+	write("dialog", dialog)
 }
 
-func newEditorWith(s string) *editor.Editor {
-	e := editor.New()
-	e.SetText(s)
-	return e
+// fixtureDir builds a directory that looks like somewhere a book is being
+// written, including the two kinds of file the listing filters out.
+func fixtureDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	if err := os.Mkdir(filepath.Join(dir, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{
+		"chapter-01.md", "chapter-02.md", "chapter-03.md",
+		"outline.md", "characters.md", "research.txt",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Neither of these should appear in the shot: that is the point of them.
+	if err := os.WriteFile(filepath.Join(dir, ".draft.swp"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cover.png"), []byte("\x89PNG\x00\x1a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
+
+const lorem = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod " +
+	"tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis " +
+	"nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n" +
+	"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu " +
+	"fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in " +
+	"culpa qui officia deserunt mollit anim id est laborum.\n\n" +
+	"Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium " +
+	"doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore " +
+	"veritatis et quasi architecto beatae vitae dicta sunt explicabo."

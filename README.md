@@ -8,14 +8,7 @@ A distraction-free terminal text editor. Black screen, a centered page, and one 
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go&logoColor=white)
 ![Bubble Tea](https://img.shields.io/badge/Bubble%20Tea-FF69B4?style=for-the-badge)
 
-```
-                    The cursor is here and nothing else exists.
-                    █
-
-
-
- v0.1.0  draft.md*                                              F1 Help
-```
+<img src="assets/writing.svg" alt="A page of text centred in a wider terminal, with a status bar at the foot showing the filename and an unsaved marker" width="100%">
 
 </div>
 
@@ -87,6 +80,15 @@ GOOS=linux GOARCH=arm64 go build .   # for an ARM device, from elsewhere
 
 Undo works in bursts: one `Ctrl+Z` takes back a word, not a letter.
 
+`F1` puts the whole list on screen, over the page rather than instead of it, and
+`?` from there opens About:
+
+![The help panel floating over the page, two columns of shortcuts](assets/help.svg)
+
+`Ctrl+T` counts what you have written so far:
+
+![The stats panel showing words, characters, pages and read time](assets/stats.svg)
+
 ### In the file dialogs
 
 | Shortcut | Action |
@@ -97,12 +99,17 @@ Undo works in bursts: one `Ctrl+Z` takes back a word, not a letter.
 | `Enter` | Enter a directory, or open the file |
 | `Esc` | Clear the filter, then close |
 
+![The open dialog listing a writing directory, directories first](assets/dialog.svg)
+
 Binary files stay out of the listing by default — opening a PNG only fills the
-page with control characters. Stepping up to the parent directory leaves the
-cursor on the directory you came out of.
+page with control characters, and neither the `cover.png` nor the `.draft.swp`
+in that directory is shown. Stepping up to the parent leaves the cursor on the
+directory you came out of.
 
 Anything that would throw away unsaved work — quitting, starting a new document,
 opening another file, saving over an existing one — asks first.
+
+![A confirmation panel asking whether to discard changes](assets/confirm.svg)
 
 ## The status bar
 
@@ -156,9 +163,9 @@ go vet ./...
 go build .
 ```
 
-To look at the interface without a terminal, `PREVIEW=1 go test ./internal/ui -run TestPreview -v`
-dumps every screen — page, status bar, help, about, stats, both file dialogs —
-at several terminal sizes.
+The screens above are generated, not drawn: `./assets/screens.sh` renders the
+editor's real `View()` output to SVG, so they cannot quietly fall out of date
+with the interface. Rerun it after any change to the UI.
 
 ## License
 

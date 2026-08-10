@@ -2,4 +2,5 @@ justwrite
 justwrite.exe
 *.tmp
 assets/tapes/bin/
+assets/frames/
 .claude/

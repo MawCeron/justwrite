@@ -62,13 +62,16 @@ none of them taken yet:
   arriving together; if they split, `OP` gets typed into the document and the
   screenshot comes out with rubbish in it.
 
-## Wiring the captures into the README
+## Stills are already covered
 
-Once the files exist, the ASCII mock in the main README is meant to be replaced:
+The still screens in the README come from `../screens.sh`, which renders the
+editor's own `View()` to SVG without needing a PTY at all — so it runs anywhere,
+including where VHS cannot. Do not duplicate those shots here.
+
+What VHS is still for is the one thing a still cannot show: motion. When
+`hero.tape` has been recorded, put the GIF at the top of the README, above the
+static screen:
 
 ```markdown
 <img src="assets/justwrite.gif" alt="Writing in justwrite, then saving it" width="100%">
 ```
-
-Leave the mock in place until then — a README pointing at images that are not
-there yet looks worse than one with no images at all.
