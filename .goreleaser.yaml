@@ -23,6 +23,25 @@ archives:
       - goos: windows
         formats: [zip]
 
+# Only the Linux builds end up here; nfpm ignores the rest.
+nfpms:
+  - package_name: justwrite
+    vendor: Mauricio Cerón
+    maintainer: Mauricio Cerón <ceron.maw@gmail.com>
+    homepage: https://github.com/MawCeron/justwrite
+    description: A minimal, distraction-free terminal text editor.
+    license: MIT
+    section: editors
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/justwrite/copyright
+      - src: README.md
+        dst: /usr/share/doc/justwrite/README.md
+
 changelog:
   abbrev: -1
   filters:
