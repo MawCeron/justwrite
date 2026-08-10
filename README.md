@@ -56,10 +56,13 @@ justwrite draft.md     # open a file, or start one under that name
 Naming a file that does not exist yet is how you start one: the name sticks, and
 `Ctrl+S` saves straight to it.
 
-Cross-compiling for a writing device is the usual Go one-liner:
+On the machine you write on, that is all of it — `go build .` produces the
+binary for the machine it ran on. `GOOS`/`GOARCH` only come into it when the
+writing device is *not* the machine you build on, such as an ARM writerdeck
+built from a laptop:
 
 ```bash
-GOOS=linux GOARCH=arm64 go build .
+GOOS=linux GOARCH=arm64 go build .   # for an ARM device, from elsewhere
 ```
 
 ## Keyboard shortcuts
