@@ -111,6 +111,7 @@ var shortcuts = [][2]string{
 	{"ctrl+←→", "jump word"},
 	{"shift+↑↓←→", "select"},
 	{"pgup/pgdn", "scroll"},
+	{"shift+pgup/pgdn", "select"},
 	{"tab", "insert 4 spaces"},
 	{"esc", "close panel"},
 }
