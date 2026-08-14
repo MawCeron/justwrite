@@ -5,7 +5,7 @@
 A distraction-free terminal text editor. Black screen, a centered page, and one line at the foot that tells you where you are.
 
 [![License](https://img.shields.io/github/license/MawCeron/justwrite?style=for-the-badge)](https://github.com/MawCeron/justwrite/blob/main/LICENSE)
-![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=for-the-badge&logo=go&logoColor=white)
 ![Bubble Tea](https://img.shields.io/badge/Bubble%20Tea-FF69B4?style=for-the-badge)
 
 <img src="assets/writing.svg" alt="A page of text centred in a wider terminal, with a status bar at the foot showing the filename and an unsaved marker" width="100%">
