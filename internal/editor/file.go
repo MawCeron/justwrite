@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 )
 
 // ErrNoPath means the document has never been named, so the caller should ask
@@ -38,12 +39,28 @@ func (e *Editor) Save() error {
 	if e.Path == "" {
 		return ErrNoPath
 	}
-	tmp := e.Path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(e.Text()), 0o644); err != nil {
+	dir := filepath.Dir(e.Path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(e.Path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, e.Path); err != nil {
-		os.Remove(tmp)
+	tmpPath := tmp.Name()
+	if _, err := tmp.WriteString(e.Text()); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, e.Path); err != nil {
+		os.Remove(tmpPath)
 		return err
 	}
 	e.Modified = false

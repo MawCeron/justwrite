@@ -24,9 +24,35 @@ func TestSaveWritesTheDocument(t *testing.T) {
 		t.Error("the document is still marked modified after a good save")
 	}
 	// The write goes through a temporary file; leaving it behind would litter
-	// the writing directory with .tmp files on every ctrl+s.
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Error("the temporary file was left behind")
+	// the writing directory with stray files on every ctrl+s.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("directory has %d entries after save, want 1 (the temp file was left behind)", len(entries))
+	}
+}
+
+// Save() draws its temporary name from os.CreateTemp, so a file that happens
+// to already be named <doc>.tmp must not be mistaken for it and destroyed.
+func TestSaveDoesNotClobberAPreexistingTmpFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nota.md")
+	foreign := path + ".tmp"
+	if err := os.WriteFile(foreign, []byte("no me toques"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	e.SetText("hola")
+	e.Path = path
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if b, err := os.ReadFile(foreign); err != nil || string(b) != "no me toques" {
+		t.Errorf("the pre-existing .tmp file is %q (%v), want it untouched", b, err)
 	}
 }
 
@@ -51,6 +77,11 @@ func TestAFailedSaveLeavesTheOriginalAlone(t *testing.T) {
 	}
 	e.Path = blocked
 
+	before, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if err := e.Save(); err == nil {
 		t.Fatal("saving onto a directory should fail")
 	}
@@ -60,8 +91,12 @@ func TestAFailedSaveLeavesTheOriginalAlone(t *testing.T) {
 	if b, _ := os.ReadFile(path); string(b) != "el borrador bueno" {
 		t.Errorf("the original file changed: %q", b)
 	}
-	if _, err := os.Stat(blocked + ".tmp"); !os.IsNotExist(err) {
-		t.Error("the temporary file was left behind after a failure")
+	after, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("directory has %d entries after a failed save, want %d (the temp file was left behind)", len(after), len(before))
 	}
 }
 
