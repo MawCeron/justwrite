@@ -39,6 +39,11 @@ func (e *Editor) Save() error {
 	if e.Path == "" {
 		return ErrNoPath
 	}
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(e.Path); err == nil {
+		mode = info.Mode().Perm()
+	}
+
 	dir := filepath.Dir(e.Path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(e.Path)+".*.tmp")
 	if err != nil {
@@ -50,7 +55,7 @@ func (e *Editor) Save() error {
 		os.Remove(tmpPath)
 		return err
 	}
-	if err := tmp.Chmod(0o644); err != nil {
+	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		return err
