@@ -149,6 +149,9 @@ opening another file, saving over an existing one — asks first.
 renamed into place, so an interrupted or failed save leaves the previous draft
 intact rather than a half-written file.
 
+**Line endings are preserved.** A file that uses CRLF keeps using CRLF;
+everything else is saved as LF. A file that mixes both is saved as CRLF.
+
 **The clipboard travels.** Copying works over SSH and inside tmux, with no
 display server. For tmux, add `set -g set-clipboard on`. Text pasted in from
 elsewhere lands as a single undo step.
