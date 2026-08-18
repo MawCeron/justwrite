@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // ErrNoPath means the document has never been named, so the caller should ask
@@ -60,6 +61,11 @@ func (e *Editor) Save() error {
 		os.Remove(tmpPath)
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(tmpPath)
 		return err
@@ -68,8 +74,24 @@ func (e *Editor) Save() error {
 		os.Remove(tmpPath)
 		return err
 	}
+	syncDir(dir)
 	e.Modified = false
 	return nil
+}
+
+// syncDir best-effort fsyncs dir so the rename above survives a power loss,
+// not just a crashed process. Windows has no equivalent, so this is a no-op
+// there.
+func syncDir(dir string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	defer d.Close()
+	d.Sync()
 }
 
 // SaveAs names the document and saves it. The name only sticks if the write
