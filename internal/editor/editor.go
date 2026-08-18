@@ -25,6 +25,7 @@ type Editor struct {
 	buf    []rune
 	cursor int
 	anchor int
+	crlf   bool // true if the loaded file used \r\n; Save() restores it
 
 	Path     string // "" until the document has been saved somewhere
 	Modified bool
@@ -58,6 +59,7 @@ func (e *Editor) SetText(s string) {
 	e.cursor = len(e.buf)
 	e.anchor = noSel
 	e.Scroll = 0
+	e.crlf = false
 	e.undo = nil
 	e.redo = nil
 	e.pendingAt = noSel
