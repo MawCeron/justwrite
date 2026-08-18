@@ -206,8 +206,12 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.ed.End(vlines, true)
 	case "pgup":
 		a.ed.PageUp(vlines, page, false)
+	case "shift+pgup":
+		a.ed.PageUp(vlines, page, true)
 	case "pgdown":
 		a.ed.PageDown(vlines, page, false)
+	case "shift+pgdown":
+		a.ed.PageDown(vlines, page, true)
 
 	// ── Input ──
 	case "enter":
