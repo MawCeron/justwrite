@@ -3,6 +3,7 @@ package editor
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -53,6 +54,34 @@ func TestSaveDoesNotClobberAPreexistingTmpFile(t *testing.T) {
 
 	if b, err := os.ReadFile(foreign); err != nil || string(b) != "no me toques" {
 		t.Errorf("the pre-existing .tmp file is %q (%v), want it untouched", b, err)
+	}
+}
+
+// A document opened at a stricter mode than 0644 — a private journal at 0600,
+// say — must not come back looser just because it went through Save().
+func TestSavePreservesFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows file modes don't distinguish 0600 from 0644")
+	}
+
+	path := filepath.Join(t.TempDir(), "privado.md")
+	if err := os.WriteFile(path, []byte("secreto"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	e.SetText("secreto nuevo")
+	e.Path = path
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("mode = %o, want 0600", got)
 	}
 }
 
