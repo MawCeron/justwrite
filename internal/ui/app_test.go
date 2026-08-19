@@ -216,6 +216,39 @@ func TestSaveAsScrollStaysInsideWhatItDraws(t *testing.T) {
 	}
 }
 
+// commitName compared an absolute path built from a.exp.dir against
+// a.ed.Path exactly as the user typed it — relative if justwrite was
+// launched as `justwrite nota.md`. Saving over the file already open under
+// that name must not ask to overwrite itself.
+func TestSaveAsOverTheOpenFileAsksNothing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "nota.md"), []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(wd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp("nota.md")
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a.exp.refresh(a.startDir(), "")
+	a.name.SetValue("nota.md")
+
+	a.commitName()
+
+	if a.mode == ModeConfirm {
+		t.Error("asked to overwrite the file that is already open")
+	}
+}
+
 // Home, End and PageUp all index into the rows of the page, so a terminal too
 // narrow to hold any text still has to produce one. If that guard ever goes,
 // this test panics rather than fails.

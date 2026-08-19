@@ -478,7 +478,12 @@ func (a *App) commitName() tea.Cmd {
 	}
 	path := filepath.Join(a.exp.dir, name)
 
-	if _, err := os.Stat(path); err == nil && path != a.ed.Path {
+	edPath := a.ed.Path
+	if abs, err := filepath.Abs(edPath); err == nil {
+		edPath = abs
+	}
+
+	if _, err := os.Stat(path); err == nil && path != edPath {
 		a.name.Blur()
 		a.confirm = confirmation{
 			message: "overwrite " + filepath.Base(path) + "?",
