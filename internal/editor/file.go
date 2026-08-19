@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // ErrNoPath means the document has never been named, so the caller should ask
@@ -26,11 +27,24 @@ func (e *Editor) Load(path string) error {
 	case err != nil:
 		return err
 	default:
-		e.SetText(string(b))
+		text, crlf := normalizeLineEndings(string(b))
+		e.SetText(text)
+		e.crlf = crlf
 	}
 	e.Path = path
 	e.Modified = false
 	return nil
+}
+
+// normalizeLineEndings converts CRLF (and a stray lone CR) to LF for the
+// in-memory buffer, and reports whether the file used CRLF at all. A file
+// that mixes endings is treated as CRLF — once any \r\n is present, saving
+// should not guess a third convention.
+func normalizeLineEndings(s string) (text string, crlf bool) {
+	crlf = strings.Contains(s, "\r\n")
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s, crlf
 }
 
 // Save writes the document through a temporary file in the same directory and
@@ -51,7 +65,11 @@ func (e *Editor) Save() error {
 		return err
 	}
 	tmpPath := tmp.Name()
-	if _, err := tmp.WriteString(e.Text()); err != nil {
+	text := e.Text()
+	if e.crlf {
+		text = strings.ReplaceAll(text, "\n", "\r\n")
+	}
+	if _, err := tmp.WriteString(text); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		return err

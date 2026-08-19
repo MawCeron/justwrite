@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -159,6 +160,130 @@ func TestLoadingAMissingFileKeepsTheName(t *testing.T) {
 	}
 	if e.Text() != "" || e.Modified {
 		t.Errorf("document is %q (modified=%v), want empty and clean", e.Text(), e.Modified)
+	}
+}
+
+// Load keeps the document's bytes as LF internally, so wrapping, the cursor
+// and the stats panel never see a \r sitting in the buffer as a stray glyph.
+func TestLoadNormalizesCRLF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "windows.md")
+	if err := os.WriteFile(path, []byte("uno\r\ndos\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := e.Text(); got != "uno\ndos\n" {
+		t.Errorf("Text() = %q, want %q", got, "uno\ndos\n")
+	}
+
+	// The stats panel counted a \r as a character on every line before this
+	// fix; with the buffer normalized there is nothing left to over-count.
+	lf := New()
+	lf.SetText("uno\ndos\n")
+	if got, want := e.CharCount(), lf.CharCount(); got != want {
+		t.Errorf("CharCount() = %d, want %d (same as the LF-only equivalent)", got, want)
+	}
+}
+
+// A file that came in as CRLF must go back out as CRLF, unmodified, or a
+// Windows collaborator sees every line flagged as changed by their VCS.
+func TestSaveRoundTripsCRLF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "windows.md")
+	original := []byte("uno\r\ndos\r\n")
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Errorf("file is %q, want it unchanged at %q", got, original)
+	}
+}
+
+// The reverse must hold too: an LF file stays LF, never picking up a \r it
+// never had.
+func TestSaveRoundTripsLF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unix.md")
+	original := []byte("uno\ndos\n")
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Errorf("file is %q, want it unchanged at %q", got, original)
+	}
+}
+
+// A document that never went through Load — started fresh with ctrl+n — has
+// no CRLF history to preserve, so it saves as LF.
+func TestNewDocumentSavesWithLF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nuevo.md")
+	e := New()
+	e.SetText("uno\ndos\n")
+	e.Path = path
+
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(got, []byte("\r")) {
+		t.Errorf("file is %q, want no CR", got)
+	}
+}
+
+// A file that mixes \r\n and bare \n has no single correct answer, so the
+// policy is: any \r\n found at all means the whole document saves as CRLF.
+func TestMixedLineEndingsPickCRLF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mixto.md")
+	if err := os.WriteFile(path, []byte("uno\r\ndos\nzz\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "uno\r\ndos\r\nzz\r\n"; string(got) != want {
+		t.Errorf("file is %q, want %q", got, want)
 	}
 }
 
