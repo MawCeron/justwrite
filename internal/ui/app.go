@@ -415,7 +415,7 @@ func (a App) keySaveAs(msg tea.KeyMsg) (App, tea.Cmd) {
 
 // browse handles the keys the listing shares between both dialogs.
 func (a *App) browse(msg tea.KeyMsg) {
-	window := a.panelHeight()
+	window := a.listRows()
 	switch msg.String() {
 	case "up":
 		a.exp.move(-1, window)
@@ -478,7 +478,12 @@ func (a *App) commitName() tea.Cmd {
 	}
 	path := filepath.Join(a.exp.dir, name)
 
-	if _, err := os.Stat(path); err == nil && path != a.ed.Path {
+	edPath := a.ed.Path
+	if abs, err := filepath.Abs(edPath); err == nil {
+		edPath = abs
+	}
+
+	if _, err := os.Stat(path); err == nil && path != edPath {
 		a.name.Blur()
 		a.confirm = confirmation{
 			message: "overwrite " + filepath.Base(path) + "?",

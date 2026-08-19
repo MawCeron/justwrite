@@ -32,6 +32,16 @@ func (a App) panel() string {
 func (a App) panelWidth() int  { return min(max(a.w-8, 20), 64, a.w-2) }
 func (a App) panelHeight() int { return clamp(a.h-6, 6, 20) }
 
+// listRows is how many rows of the listing filePanel actually draws, so
+// browse scrolls by the same window instead of recomputing a different one —
+// save-as reserves two rows underneath for the filename field.
+func (a App) listRows() int {
+	if a.mode == ModeSaveAs {
+		return max(a.panelHeight()-2, 1)
+	}
+	return a.panelHeight()
+}
+
 func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
 
 // divider stands in for a body line that should be drawn as a rule joining
