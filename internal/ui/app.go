@@ -415,7 +415,7 @@ func (a App) keySaveAs(msg tea.KeyMsg) (App, tea.Cmd) {
 
 // browse handles the keys the listing shares between both dialogs.
 func (a *App) browse(msg tea.KeyMsg) {
-	window := a.panelHeight()
+	window := a.listRows()
 	switch msg.String() {
 	case "up":
 		a.exp.move(-1, window)

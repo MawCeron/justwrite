@@ -166,12 +166,11 @@ func (e *explorer) rows(n, width int, focused bool) []string {
 // filePanel draws the open and save-as dialogs. They share the listing; save-as
 // adds the filename field underneath it.
 func (a App) filePanel() string {
-	width, height := a.panelWidth(), a.panelHeight()
+	width := a.panelWidth()
 
-	listRows := height
+	listRows := a.listRows()
 	title := "open"
 	if a.mode == ModeSaveAs {
-		listRows = max(height-2, 1)
 		title = "save as"
 	}
 
