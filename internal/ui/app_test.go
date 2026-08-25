@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -186,6 +187,65 @@ func TestSavingAnUnnamedDocumentOpensTheDialog(t *testing.T) {
 	}
 	if !a.onName {
 		t.Error("focus should start in the filename field, which is what you pressed save to fill in")
+	}
+}
+
+// browse scrolled by the full panel height, but save-as only draws
+// height-2 rows for the listing — the other two hold the filename field —
+// so holding the cursor down could push it below what filePanel renders.
+func TestSaveAsScrollStaysInsideWhatItDraws(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 40 {
+		name := filepath.Join(dir, fmt.Sprintf("archivo%02d.md", i))
+		if err := os.WriteFile(name, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a := testApp(t)
+	a.mode = ModeSaveAs
+	a.exp.refresh(dir, "")
+
+	for range 50 {
+		a.browse(tea.KeyMsg{Type: tea.KeyDown})
+	}
+
+	rows := a.listRows()
+	if a.exp.cursor < a.exp.offset || a.exp.cursor >= a.exp.offset+rows {
+		t.Errorf("cursor %d outside the visible window [%d, %d)", a.exp.cursor, a.exp.offset, a.exp.offset+rows)
+	}
+}
+
+// commitName compared an absolute path built from a.exp.dir against
+// a.ed.Path exactly as the user typed it — relative if justwrite was
+// launched as `justwrite nota.md`. Saving over the file already open under
+// that name must not ask to overwrite itself.
+func TestSaveAsOverTheOpenFileAsksNothing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "nota.md"), []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(wd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp("nota.md")
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a.exp.refresh(a.startDir(), "")
+	a.name.SetValue("nota.md")
+
+	a.commitName()
+
+	if a.mode == ModeConfirm {
+		t.Error("asked to overwrite the file that is already open")
 	}
 }
 
