@@ -131,32 +131,60 @@ var shortcuts = [][2]string{
 func (a App) helpPanel() string {
 	width := a.panelWidth()
 
-	// A fixed key column, so the descriptions line up as a table instead of
-	// drifting apart to the far edge.
-	cell := func(s [2]string) string {
-		gap := max(13-ansi.StringWidth(s[0]), 1)
+	// helpGap is the breathing room after the longest key in a column — more
+	// than the one space alignment alone requires, so the table reads as a
+	// table rather than a packed list.
+	const helpGap = 2
+
+	cell := func(s [2]string, keyWidth int) string {
+		gap := max(keyWidth-ansi.StringWidth(s[0]), 0) + helpGap
 		// The indent is inside the styled run: two bare spaces would show the
 		// terminal's own background as a notch in the panel.
 		return overlayStyle.Render("  "+s[0]) + overlayDimStyle.Render(strings.Repeat(" ", gap)+s[1])
 	}
 
+	// keyWidth is the longest key in list; cellWidth is the widest rendered
+	// cell that column will ever draw, both computed rather than guessed, so
+	// a longer shortcut can only widen its own column instead of silently
+	// misaligning or overflowing it.
+	keyWidth := func(list [][2]string) int {
+		w := 0
+		for _, s := range list {
+			w = max(w, ansi.StringWidth(s[0]))
+		}
+		return w
+	}
+	cellWidth := func(list [][2]string, kw int) int {
+		w := 0
+		for _, s := range list {
+			w = max(w, 2+kw+helpGap+ansi.StringWidth(s[1]))
+		}
+		return w
+	}
+
+	rows := (len(shortcuts) + 1) / 2
+	left, right := shortcuts[:rows], shortcuts[rows:]
+	leftKey, rightKey := keyWidth(left), keyWidth(right)
+	leftWidth, rightWidth := cellWidth(left, leftKey), cellWidth(right, rightKey)
+
 	var body []string
 	body = append(body, "")
 
-	// Two columns when there is room for them, one when there is not.
-	if width >= 52 {
-		half := width / 2
-		rows := (len(shortcuts) + 1) / 2
-		for i := range rows {
-			line := fitCell(cell(shortcuts[i]), half, overlayStyle.Render)
-			if j := i + rows; j < len(shortcuts) {
-				line += cell(shortcuts[j])
+	// Two columns only when both actually fit at their natural width — the
+	// short "ctrl+X" column and the longer movement-key column need
+	// different amounts of room, not an even half each.
+	if width >= leftWidth+rightWidth {
+		for i, s := range left {
+			line := fitCell(cell(s, leftKey), leftWidth, overlayStyle.Render)
+			if i < len(right) {
+				line += cell(right[i], rightKey)
 			}
 			body = append(body, line)
 		}
 	} else {
+		kw := max(leftKey, rightKey)
 		for _, s := range shortcuts {
-			body = append(body, cell(s))
+			body = append(body, cell(s, kw))
 		}
 	}
 
