@@ -82,12 +82,19 @@ func TestReleaseVersion(t *testing.T) {
 	}
 }
 
-func TestAMessageTakesOverTheNote(t *testing.T) {
+// A status message no longer hides which file it is about — only when there
+// is no name yet does the message stand alone.
+func TestAMessageJoinsTheFilename(t *testing.T) {
 	a := testApp(t)
 	a.ed.Path = "/home/m/nota.md"
 	a.status = "saved"
 
-	if got := a.note(); got != "saved" {
-		t.Errorf("note = %q, want the message", got)
+	if got, want := a.note(), "nota.md · saved"; got != want {
+		t.Errorf("note = %q, want %q", got, want)
+	}
+
+	a.ed.Path = ""
+	if got, want := a.note(), "saved"; got != want {
+		t.Errorf("note = %q, want %q (no filename yet)", got, want)
 	}
 }

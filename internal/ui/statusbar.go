@@ -85,11 +85,9 @@ func (a App) statusBar() string {
 
 // note is what the bar says about the document. A document that has never been
 // saved shows no invented name — only the marker, and only once it has changes
-// worth losing.
+// worth losing. A status message joins the name rather than hiding it, so the
+// bar never stops saying which file you are in.
 func (a App) note() string {
-	if a.status != "" {
-		return a.status
-	}
 	name := ""
 	if a.ed.Path != "" {
 		name = filepath.Base(a.ed.Path)
@@ -97,5 +95,12 @@ func (a App) note() string {
 	if a.ed.Modified {
 		name += "*"
 	}
-	return name
+	switch {
+	case a.status == "":
+		return name
+	case name == "":
+		return a.status
+	default:
+		return name + " · " + a.status
+	}
 }
