@@ -147,6 +147,29 @@ func TestWordMovement(t *testing.T) {
 	}
 }
 
+// PageUp used to nudge Scroll by hand while PageDown left it entirely to
+// AdjustScroll, so paging down and back up landed the viewport one extra
+// scrollMargin higher than paging down and then walking back up would.
+func TestPagingUpAndDownIsSymmetric(t *testing.T) {
+	const page = 10
+	e := fiftyLines()
+	vlines := e.VisualLines(20)
+	e.cursor = vlines[20].Start
+	e.AdjustScroll(vlines, page)
+
+	e.PageDown(vlines, page, false)
+	e.AdjustScroll(vlines, page)
+
+	e.PageUp(vlines, page, false)
+	e.AdjustScroll(vlines, page)
+
+	// Back near line 20, under the same "keep a margin above the cursor"
+	// rule AdjustScroll already applies to any upward move: 20-scrollMargin.
+	if want := 20 - scrollMargin; e.Scroll != want {
+		t.Errorf("Scroll = %d after paging down then up, want %d", e.Scroll, want)
+	}
+}
+
 // Shift+arrow has to keep the anchor where the selection began, or extending a
 // selection would only ever select one character.
 func TestExtendingKeepsTheAnchor(t *testing.T) {

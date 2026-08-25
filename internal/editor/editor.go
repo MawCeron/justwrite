@@ -382,7 +382,6 @@ func (e *Editor) PageUp(vlines []VisualLine, page int, extend bool) {
 	cur := e.CursorVisualLine(vlines)
 	col := e.cursor - vlines[cur].Start
 	e.cursor = columnIn(vlines[max(cur-page, 0)], col)
-	e.Scroll = max(e.Scroll-page, 0)
 }
 
 func (e *Editor) PageDown(vlines []VisualLine, page int, extend bool) {
