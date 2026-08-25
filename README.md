@@ -99,6 +99,8 @@ Naming a file that does not exist yet is how you start one: the name sticks, and
 | `Shift+arrows` | Extend the selection |
 | `Page Up/Down` | Scroll by page |
 | `Shift+Page Up/Down` | Extend the selection |
+| `Ctrl+Home/End` | Jump to the start or end of the document |
+| `Ctrl+Shift+Home/End` | Extend the selection to the start or end |
 | `Tab` | Insert 4 spaces |
 | `Esc` | Close panel / cancel |
 

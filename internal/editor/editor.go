@@ -374,6 +374,19 @@ func (e *Editor) End(vlines []VisualLine, extend bool) {
 	e.cursor = vlines[e.CursorVisualLine(vlines)].End
 }
 
+// DocumentHome moves to the very start of the document — ctrl+home. Home only
+// reaches the start of the current visual line.
+func (e *Editor) DocumentHome(extend bool) {
+	e.beforeMove(extend)
+	e.cursor = 0
+}
+
+// DocumentEnd moves to the very end of the document — ctrl+end.
+func (e *Editor) DocumentEnd(extend bool) {
+	e.beforeMove(extend)
+	e.cursor = len(e.buf)
+}
+
 func (e *Editor) PageUp(vlines []VisualLine, page int, extend bool) {
 	e.beforeMove(extend)
 	if len(vlines) == 0 {

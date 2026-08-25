@@ -170,6 +170,39 @@ func TestPagingUpAndDownIsSymmetric(t *testing.T) {
 	}
 }
 
+// Home and End only reach the edges of the current visual line; ctrl+home and
+// ctrl+end have to reach the edges of the whole document instead.
+func TestDocumentHomeAndEnd(t *testing.T) {
+	e := New()
+	e.SetText("uno\ndos\ntres")
+	e.cursor = 6 // somewhere in the middle line
+
+	e.DocumentEnd(false)
+	if e.cursor != len(e.Runes()) {
+		t.Errorf("DocumentEnd: cursor = %d, want %d", e.cursor, len(e.Runes()))
+	}
+
+	e.DocumentHome(false)
+	if e.cursor != 0 {
+		t.Errorf("DocumentHome: cursor = %d, want 0", e.cursor)
+	}
+}
+
+// ctrl+shift+home/end select like every other movement key: the anchor stays
+// where the selection began.
+func TestDocumentHomeAndEndExtendSelection(t *testing.T) {
+	e := New()
+	e.SetText("uno\ndos\ntres")
+	e.cursor = 6
+
+	e.DocumentEnd(true)
+
+	start, end, ok := e.Selection()
+	if !ok || start != 6 || end != len(e.Runes()) {
+		t.Errorf("selection (%d,%d,%v), want (6,%d,true)", start, end, ok, len(e.Runes()))
+	}
+}
+
 // Shift+arrow has to keep the anchor where the selection began, or extending a
 // selection would only ever select one character.
 func TestExtendingKeepsTheAnchor(t *testing.T) {

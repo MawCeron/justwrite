@@ -204,6 +204,14 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.ed.End(vlines, false)
 	case "shift+end":
 		a.ed.End(vlines, true)
+	case "ctrl+home":
+		a.ed.DocumentHome(false)
+	case "ctrl+shift+home":
+		a.ed.DocumentHome(true)
+	case "ctrl+end":
+		a.ed.DocumentEnd(false)
+	case "ctrl+shift+end":
+		a.ed.DocumentEnd(true)
 	case "pgup":
 		a.ed.PageUp(vlines, page, false)
 	case "shift+pgup":
