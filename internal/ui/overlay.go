@@ -122,8 +122,8 @@ var shortcuts = [][2]string{
 	{"shift+↑↓←→", "select"},
 	{"pgup/pgdn", "scroll"},
 	{"shift+pgup/pgdn", "select"},
-	{"ctrl+home/end", "start/end of doc"},
-	{"ctrl+shift+home/end", "select to start/end"},
+	{"ctrl+home/end", "start/end"},
+	{"ctrl+shift+home/end", "select"},
 	{"tab", "insert 4 spaces"},
 	{"esc", "close panel"},
 }
