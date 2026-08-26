@@ -11,11 +11,11 @@ import (
 
 const appName = "justwrite"
 
-// buildInfo reads the version and commit Go stamps into the binary. A plain
+// BuildInfo reads the version and commit Go stamps into the binary. A plain
 // `go build` inside the repository records the revision, and `go install
 // module@version` records the tag, so there is nothing to keep up to date by
 // hand and no -ldflags to remember.
-var buildInfo = sync.OnceValues(func() (version, commit string) {
+var BuildInfo = sync.OnceValues(func() (version, commit string) {
 	version, commit = "dev", ""
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -54,8 +54,20 @@ func releaseVersion(v string) string {
 }
 
 func versionLabel() string {
-	v, _ := buildInfo()
+	v, _ := BuildInfo()
 	return v
+}
+
+// VersionString is what justwrite calls itself: the tag it was built from,
+// or "dev", plus the commit when one is known. Shared by --version and the
+// About panel, so the two can never drift apart.
+func VersionString() string {
+	v, commit := BuildInfo()
+	s := appName + " " + v
+	if commit != "" {
+		s += " (" + commit + ")"
+	}
+	return s
 }
 
 // statusBar draws the one line of chrome justwrite has, at the full width of

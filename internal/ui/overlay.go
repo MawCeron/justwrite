@@ -216,11 +216,7 @@ func (a App) helpPanel() string {
 
 func (a App) aboutPanel() string {
 	width := a.panelWidth()
-	v, commit := buildInfo()
-	title := appName + " " + v
-	if commit != "" {
-		title += " (" + commit + ")"
-	}
+	title := VersionString()
 
 	body := []string{
 		"",
