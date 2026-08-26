@@ -184,7 +184,8 @@ and most of the tests live there.
 
 ## Contributing
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome. See [CHANGELOG.md](CHANGELOG.md) for
+what has actually shipped.
 
 ```bash
 go test ./...   # the whole suite
