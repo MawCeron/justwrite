@@ -400,3 +400,124 @@ func TestSessionWordsCanGoNegative(t *testing.T) {
 		t.Errorf("SessionWords() = %d, want -1", got)
 	}
 }
+
+func selection(t *testing.T, e *Editor) (start, end int) {
+	t.Helper()
+	start, end, ok := e.Selection()
+	if !ok {
+		t.Fatal("no selection, want a match")
+	}
+	return start, end
+}
+
+// Repeating a forward search steps to the next match instead of finding the
+// one already selected, because the search starts at the cursor — which a
+// match leaves at its own end.
+func TestFindStepsToTheNextMatch(t *testing.T) {
+	e := New()
+	e.SetText("uno dos uno dos")
+	e.cursor = 0
+
+	if !e.Find("uno", false) {
+		t.Fatal("Find did not match")
+	}
+	if start, end := selection(t, e); start != 0 || end != 3 {
+		t.Errorf("selection (%d,%d), want (0,3)", start, end)
+	}
+
+	if !e.Find("uno", false) {
+		t.Fatal("second Find did not match")
+	}
+	if start, end := selection(t, e); start != 8 || end != 11 {
+		t.Errorf("selection (%d,%d), want (8,11) — the second uno", start, end)
+	}
+}
+
+// A forward search that runs off the end wraps to the first match rather
+// than reporting nothing left.
+func TestFindWrapsForward(t *testing.T) {
+	e := New()
+	e.SetText("uno dos uno dos")
+	e.cursor = len(e.Runes())
+
+	if !e.Find("uno", false) {
+		t.Fatal("Find did not match")
+	}
+	if start, end := selection(t, e); start != 0 || end != 3 {
+		t.Errorf("selection (%d,%d), want (0,3) — wrapped to the first uno", start, end)
+	}
+}
+
+// Backward search steps from the anchor, not the cursor, so it does not
+// immediately re-select the match it is standing on.
+func TestFindBackwardStepsToThePreviousMatch(t *testing.T) {
+	e := New()
+	e.SetText("uno dos uno dos")
+	e.cursor = len(e.Runes())
+
+	if !e.Find("uno", true) {
+		t.Fatal("Find did not match")
+	}
+	if start, end := selection(t, e); start != 8 || end != 11 {
+		t.Errorf("selection (%d,%d), want (8,11) — the last uno", start, end)
+	}
+
+	if !e.Find("uno", true) {
+		t.Fatal("second backward Find did not match")
+	}
+	if start, end := selection(t, e); start != 0 || end != 3 {
+		t.Errorf("selection (%d,%d), want (0,3) — wrapped to the first uno", start, end)
+	}
+}
+
+func TestFindIsCaseInsensitive(t *testing.T) {
+	e := New()
+	e.SetText("Uno dos")
+
+	if !e.Find("uno", false) {
+		t.Fatal("Find did not match a different case")
+	}
+	if start, end := selection(t, e); start != 0 || end != 3 {
+		t.Errorf("selection (%d,%d), want (0,3)", start, end)
+	}
+}
+
+// Nothing to find leaves the cursor exactly where it was, rather than
+// jumping to a leftover position from a stale search.
+func TestFindWithNoMatchChangesNothing(t *testing.T) {
+	e := New()
+	e.SetText("uno dos")
+	e.cursor = 2
+
+	if e.Find("xyz", false) {
+		t.Fatal("Find matched something that is not there")
+	}
+	if e.cursor != 2 {
+		t.Errorf("cursor = %d, want unchanged 2", e.cursor)
+	}
+	if _, _, ok := e.Selection(); ok {
+		t.Error("a failed search left a selection behind")
+	}
+}
+
+// SetCursor is how ctrl+f puts the cursor back where it was when the search
+// is cancelled, rather than wherever the last match left it.
+func TestSetCursorClampsAndClearsSelection(t *testing.T) {
+	e := New()
+	e.SetText("uno dos")
+	e.Find("dos", false) // leaves a selection
+
+	e.SetCursor(2)
+
+	if e.Cursor() != 2 {
+		t.Errorf("Cursor() = %d, want 2", e.Cursor())
+	}
+	if _, _, ok := e.Selection(); ok {
+		t.Error("SetCursor left a selection behind")
+	}
+
+	e.SetCursor(999)
+	if want := len(e.Runes()); e.Cursor() != want {
+		t.Errorf("Cursor() = %d, want %d (clamped)", e.Cursor(), want)
+	}
+}

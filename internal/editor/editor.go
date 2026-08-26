@@ -551,6 +551,83 @@ func (e *Editor) DeleteWordLeft() {
 	e.push(editOp{at: start, text: text})
 }
 
+// ─── Find ────────────────────────────────────────────────────────────────────
+
+// Find selects the next case-insensitive occurrence of query — the previous
+// one, when backward is set — wrapping around the document when the search
+// runs off one end. Reports whether anything matched; the cursor and
+// selection are left alone when nothing does.
+//
+// A match already selected from an earlier Find is excluded from the same
+// search: forward looks from the cursor, which a match leaves at its own
+// end, and backward looks from the anchor, which sits at its own start —
+// so repeating the search steps to the next one instead of finding itself.
+func (e *Editor) Find(query string, backward bool) bool {
+	needle := []rune(strings.ToLower(query))
+	if len(needle) == 0 {
+		return false
+	}
+	e.CommitPending()
+	e.goalCol = noGoal
+
+	hay := []rune(strings.ToLower(string(e.buf)))
+	from := e.cursor
+	if backward {
+		if _, _, ok := e.Selection(); ok {
+			from = e.anchor
+		}
+	}
+
+	pos, found := 0, false
+	if backward {
+		if pos, found = lastRuneIndex(hay, needle, from); !found {
+			pos, found = lastRuneIndex(hay, needle, len(hay))
+		}
+	} else {
+		if pos, found = firstRuneIndex(hay, needle, from); !found {
+			pos, found = firstRuneIndex(hay, needle, 0)
+		}
+	}
+	if !found {
+		return false
+	}
+	e.anchor = pos
+	e.cursor = pos + len(needle)
+	return true
+}
+
+// SetCursor moves the cursor to pos directly, clamped to the buffer and
+// clearing any selection — putting the cursor back where ctrl+f found it
+// when the search is cancelled, not wherever the last match left it.
+func (e *Editor) SetCursor(pos int) {
+	e.cursor = max(0, min(pos, len(e.buf)))
+	e.anchor = noSel
+	e.goalCol = noGoal
+}
+
+// firstRuneIndex is the index of the first occurrence of needle in hay at or
+// after from, or false. A document is small enough that this being a linear
+// scan rather than a real string-search algorithm is not worth the code.
+func firstRuneIndex(hay, needle []rune, from int) (int, bool) {
+	for i := max(from, 0); i+len(needle) <= len(hay); i++ {
+		if slices.Equal(hay[i:i+len(needle)], needle) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// lastRuneIndex is the index of the last occurrence of needle in hay ending
+// at or before from, or false.
+func lastRuneIndex(hay, needle []rune, from int) (int, bool) {
+	for i := min(from, len(hay)) - len(needle); i >= 0; i-- {
+		if slices.Equal(hay[i:i+len(needle)], needle) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
 func (e *Editor) WordCount() int { return len(strings.Fields(string(e.buf))) }
