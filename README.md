@@ -93,6 +93,7 @@ Naming a file that does not exist yet is how you start one: the name sticks, and
 | `Ctrl+A` | Select all |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste |
 | `Ctrl+T` | Stats — words, characters, pages, read time |
+| `Ctrl+F` | Find. `Enter`/`n` next match, `Shift+N` previous, `Esc` closes |
 | `F1` | Help |
 | `?` | About, from inside the help. Anywhere else it types a `?` |
 | `Ctrl+←/→` | Jump a word left or right |

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -540,5 +541,87 @@ func TestTypingIsNotSwallowedByPanels(t *testing.T) {
 
 	if got := a.ed.Text(); got != "" {
 		t.Errorf("keys reached the document through the stats panel: %q", got)
+	}
+}
+
+func longDocument() string {
+	lines := make([]string, 100)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line%02d", i)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// A match far below the current viewport has to actually scroll into view,
+// not just move the cursor somewhere the page never draws.
+func TestFindScrollsTheMatchIntoView(t *testing.T) {
+	a := testApp(t)
+	a.ed.SetText(longDocument())
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlF})
+	if a.mode != ModeFind {
+		t.Fatalf("ctrl+f gave mode %v, want ModeFind", a.mode)
+	}
+	a = typeRunes(a, "line90")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	a.View() // the page's own render pass is what calls AdjustScroll
+
+	vlines := a.ed.VisualLines(a.textWidth())
+	cursorRow := a.ed.CursorVisualLine(vlines)
+	height := a.textHeight()
+	if cursorRow < a.ed.Scroll || cursorRow >= a.ed.Scroll+height {
+		t.Errorf("cursor row %d outside the visible window [%d, %d)", cursorRow, a.ed.Scroll, a.ed.Scroll+height)
+	}
+}
+
+// The first enter commits the query and steps to a match; typing does not
+// reach the document, and "n"/"N" become navigation from then on.
+func TestFindTwoPhaseFlow(t *testing.T) {
+	a := testApp(t)
+	a.ed.SetText("uno dos uno dos")
+	a.ed.SetCursor(0)
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlF})
+	a = typeRunes(a, "uno")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if start, end, ok := a.ed.Selection(); !ok || start != 0 || end != 3 {
+		t.Fatalf("selection (%d,%d,%v), want (0,3,true) — the first uno", start, end, ok)
+	}
+
+	// Past the first enter, "n" steps to the next match instead of typing
+	// the letter into the query.
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if start, end, ok := a.ed.Selection(); !ok || start != 8 || end != 11 {
+		t.Fatalf("selection (%d,%d,%v), want (8,11,true) — the second uno", start, end, ok)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	if start, end, ok := a.ed.Selection(); !ok || start != 0 || end != 3 {
+		t.Fatalf("selection (%d,%d,%v), want (0,3,true) — back to the first uno", start, end, ok)
+	}
+}
+
+// esc restores the cursor to wherever it was before the search started,
+// undoing the navigation rather than leaving it on the last match.
+func TestEscRestoresTheCursorAfterFind(t *testing.T) {
+	a := testApp(t)
+	a.ed.SetText("uno dos uno dos")
+	a.ed.SetCursor(5)
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlF})
+	a = typeRunes(a, "uno")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v, want ModeWrite", a.mode)
+	}
+	if a.ed.Cursor() != 5 {
+		t.Errorf("Cursor() = %d, want 5 (restored)", a.ed.Cursor())
+	}
+	if _, _, ok := a.ed.Selection(); ok {
+		t.Error("esc left a selection behind")
 	}
 }

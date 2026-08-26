@@ -21,6 +21,8 @@ func (a App) panel() string {
 		return a.confirmPanel()
 	case ModeConflict:
 		return a.conflictPanel()
+	case ModeFind:
+		return a.findPanel()
 	case ModeOpen, ModeSaveAs:
 		return a.filePanel()
 	}
@@ -121,6 +123,7 @@ var shortcuts = [][2]string{
 	{"ctrl+x", "cut"},
 	{"ctrl+v", "paste"},
 	{"ctrl+t", "word count & stats"},
+	{"ctrl+f", "find"},
 	{"ctrl+←→", "jump a word"},
 	{"ctrl+w", "delete a word"},
 	{"shift+↑↓←→", "extend selection"},
@@ -314,4 +317,20 @@ func (a App) conflictPanel() string {
 		"",
 	}
 	return panelBox("", "", body, width)
+}
+
+// ─── Find ────────────────────────────────────────────────────────────────────
+
+func (a App) findPanel() string {
+	width := min(a.panelWidth(), 48)
+	label := overlayDimStyle.Render("  find  ")
+	if a.onFindQuery {
+		label = overlayStyle.Render("  find  ")
+	}
+	body := []string{
+		"",
+		fitCell(label+a.findInput.View(), width, overlayStyle.Render),
+		"",
+	}
+	return panelBox("", "enter/n next  N prev  esc close", body, width)
 }

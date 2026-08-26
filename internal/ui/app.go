@@ -26,6 +26,7 @@ const (
 	ModeAbout
 	ModeConfirm
 	ModeConflict // the file changed on disk since it was opened; ctrl+s stopped
+	ModeFind
 )
 
 // confirmation is a question whose yes answer throws something away.
@@ -61,6 +62,10 @@ type App struct {
 	goalInput   textinput.Model
 	editingGoal goalField // stats: which goal field has the focus, if any
 
+	findInput   textinput.Model
+	onFindQuery bool // find: typing a query, rather than stepping through matches
+	findOrigin  int  // cursor position from before the search, restored on esc
+
 	title string // last title handed to the terminal
 }
 
@@ -87,8 +92,15 @@ func NewApp(path string) (App, error) {
 	goalInput.PlaceholderStyle = overlayDimStyle
 	goalInput.Cursor.Style = cursorStyle
 
+	findInput := textinput.New()
+	findInput.Prompt = ""
+	findInput.Placeholder = "search"
+	findInput.TextStyle = overlayStyle
+	findInput.PlaceholderStyle = overlayDimStyle
+	findInput.Cursor.Style = cursorStyle
+
 	// A sane size until the terminal reports its own.
-	return App{ed: ed, name: name, goalInput: goalInput, cfg: loadConfig(), w: 80, h: 24}, nil
+	return App{ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: loadConfig(), w: 80, h: 24}, nil
 }
 
 func (a App) Init() tea.Cmd { return nil }
@@ -134,6 +146,8 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 			return a.keyClosePanel(msg)
 		case ModeConflict:
 			return a.keyConflict(msg)
+		case ModeFind:
+			return a.keyFind(msg)
 		}
 	}
 	return a, nil
@@ -187,6 +201,8 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.ed.Paste("")
 
 	// ── Panels ──
+	case "ctrl+f":
+		return a, a.openFind()
 	case "ctrl+t":
 		a.mode = ModeStats
 	case "f1":
@@ -401,6 +417,17 @@ func (a *App) saveAsDialog() tea.Cmd {
 	return a.name.Focus()
 }
 
+// openFind starts a search, remembering where the cursor was so esc can put
+// it back — the search itself may jump it all over the document.
+func (a *App) openFind() tea.Cmd {
+	a.findOrigin = a.ed.Cursor()
+	a.findInput.SetValue("")
+	a.findInput.CursorEnd()
+	a.onFindQuery = true
+	a.mode = ModeFind
+	return a.findInput.Focus()
+}
+
 func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
@@ -572,6 +599,46 @@ func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
 		return a, a.saveAsDialog()
 	case "esc":
 		a.mode = ModeWrite
+	}
+	return a, nil
+}
+
+// keyFind handles ctrl+f: typing the query field until the first enter, then
+// enter/n and N step through matches instead of typing into it — the same
+// two-phase shape a shell's reverse search uses, so "n" and "N" are free for
+// navigation once there is something to navigate.
+func (a App) keyFind(msg tea.KeyMsg) (App, tea.Cmd) {
+	if msg.String() == "esc" {
+		a.ed.SetCursor(a.findOrigin)
+		a.findInput.Blur()
+		a.onFindQuery = false
+		a.mode = ModeWrite
+		return a, nil
+	}
+
+	if a.onFindQuery {
+		if msg.String() == "enter" {
+			if !a.ed.Find(a.findInput.Value(), false) {
+				return a, a.posted("no match")
+			}
+			a.onFindQuery = false
+			a.findInput.Blur()
+			return a, nil
+		}
+		var cmd tea.Cmd
+		a.findInput, cmd = a.findInput.Update(msg)
+		return a, cmd
+	}
+
+	switch msg.String() {
+	case "enter", "n":
+		if !a.ed.Find(a.findInput.Value(), false) {
+			return a, a.posted("no match")
+		}
+	case "N":
+		if !a.ed.Find(a.findInput.Value(), true) {
+			return a, a.posted("no match")
+		}
 	}
 	return a, nil
 }
