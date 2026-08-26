@@ -95,7 +95,7 @@ Naming a file that does not exist yet is how you start one: the name sticks, and
 | `Ctrl+A` | Select all |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste |
 | `Ctrl+T` | Stats — words, characters, pages, read time |
-| `Ctrl+F` | Find. `Enter`/`n` next match, `Shift+N` previous, `Esc` closes |
+| `Ctrl+F` | Find. `Enter`/`n` next match, `Shift+N` previous, `Tab` edits the query again, `Esc` closes |
 | `F1` | Help |
 | `?` | About, from inside the help. Anywhere else it types a `?` |
 | `Ctrl+←/→` | Jump a word left or right |
@@ -114,9 +114,14 @@ Undo works in bursts: one `Ctrl+Z` takes back a word, not a letter.
 
 ![The help panel floating over the page, two columns of shortcuts](assets/help.svg)
 
-`Ctrl+T` counts what you have written so far:
+`Ctrl+T` counts what you have written so far. `g` sets a goal for the
+session, `d` for the whole document; either shows as `current / goal` once set:
 
 ![The stats panel showing words, characters, pages and read time](assets/stats.svg)
+
+`Ctrl+F` finds text, case-insensitively and wrapping around the document:
+
+![The find panel with a query typed in, over a page of text](assets/find.svg)
 
 ### In the file dialogs
 
@@ -137,6 +142,13 @@ Anything that would throw away unsaved work — quitting, starting a new documen
 opening another file, saving over an existing one — asks first.
 
 ![A confirmation panel asking whether to discard changes](assets/confirm.svg)
+
+If the file changed on disk since it was opened — another program, another
+justwrite, a synced folder — `Ctrl+S` stops instead of overwriting it, and
+offers a way out: reload the disk version, overwrite it anyway, or save as a
+different file.
+
+![A panel warning that the file changed on disk since it was opened, offering reload, overwrite, or save as](assets/conflict.svg)
 
 ## The status bar
 
@@ -164,6 +176,12 @@ elsewhere lands as a single undo step.
 
 **Colours are optional.** `NO_COLOR` is honoured, and the layout carries the
 meaning on its own.
+
+**Settings live in a config file, not environment variables.** The stats
+panel's session and document goals are the only things justwrite remembers
+between runs today, kept at the OS's usual config location (e.g.
+`~/.config/justwrite/config` on Linux) and written only from inside the app —
+there is nothing to edit by hand.
 
 ## Project structure
 
