@@ -149,6 +149,22 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 		case ModeFind:
 			return a.keyFind(msg)
 		}
+
+	default:
+		// Everything that is not a key press or one of the two above — the
+		// cursor's own blink tick, chiefly — still has to reach whichever
+		// text field is currently focused, or its cursor stops blinking and
+		// can end up stuck invisible.
+		var cmd tea.Cmd
+		switch {
+		case a.mode == ModeSaveAs && a.onName:
+			a.name, cmd = a.name.Update(msg)
+		case a.mode == ModeStats && a.editingGoal != noGoalField:
+			a.goalInput, cmd = a.goalInput.Update(msg)
+		case a.mode == ModeFind && a.onFindQuery:
+			a.findInput, cmd = a.findInput.Update(msg)
+		}
+		return a, cmd
 	}
 	return a, nil
 }
