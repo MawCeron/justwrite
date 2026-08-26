@@ -119,7 +119,7 @@ var shortcuts = [][2]string{
 	{"ctrl+v", "paste"},
 	{"ctrl+t", "word count & stats"},
 	{"ctrl+←→", "jump a word"},
-	{"ctrl+backspace/w", "delete a word"},
+	{"ctrl+w", "delete a word"},
 	{"shift+↑↓←→", "extend selection"},
 	{"pgup/pgdn", "scroll a page"},
 	{"shift+pgup/pgdn", "extend selection"},

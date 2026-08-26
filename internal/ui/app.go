@@ -229,7 +229,7 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.ed.InsertRune('\n')
 	case "backspace":
 		a.ed.Backspace()
-	case "ctrl+backspace", "ctrl+w":
+	case "ctrl+w":
 		a.ed.DeleteWordLeft()
 	case "delete":
 		a.ed.DeleteForward()

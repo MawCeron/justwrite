@@ -96,7 +96,7 @@ Naming a file that does not exist yet is how you start one: the name sticks, and
 | `F1` | Help |
 | `?` | About, from inside the help. Anywhere else it types a `?` |
 | `Ctrl+←/→` | Jump a word left or right |
-| `Ctrl+Backspace` / `Ctrl+W` | Delete the word before the cursor |
+| `Ctrl+W` | Delete the word before the cursor |
 | `Shift+arrows` | Extend the selection |
 | `Page Up/Down` | Scroll by page |
 | `Shift+Page Up/Down` | Extend the selection |

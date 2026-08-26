@@ -443,9 +443,11 @@ func (e *Editor) WordRight(extend bool) {
 }
 
 // DeleteWordLeft removes the word before the cursor as a single undo step —
-// ctrl+backspace and ctrl+w, the readline alias for the same thing. A live
-// selection is deleted instead of consulting the word boundary, matching
-// Backspace and DeleteForward.
+// ctrl+w, the readline binding for the same thing. ctrl+backspace was meant
+// to be the other way in, but without the Kitty keyboard protocol a terminal
+// sends the identical byte for it and for a plain backspace, so there is
+// nothing to bind it to. A live selection is deleted instead of consulting
+// the word boundary, matching Backspace and DeleteForward.
 func (e *Editor) DeleteWordLeft() {
 	e.CommitPending()
 	if _, _, ok := e.Selection(); ok {
