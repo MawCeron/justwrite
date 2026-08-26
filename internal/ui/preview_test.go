@@ -77,6 +77,18 @@ func TestPreview(t *testing.T) {
 	confirm.confirm = confirmation{message: "discard changes?"}
 	write("confirm", confirm)
 
+	conflict := scene()
+	conflict.mode = ModeConflict
+	write("conflict", conflict)
+
+	find := scene()
+	find.mode = ModeFind
+	find.onFindQuery = true
+	find.findInput.SetValue("cursor")
+	find.findInput.CursorEnd()
+	find.findInput.Focus()
+	write("find", find)
+
 	dialog := scene()
 	dialog.mode = ModeOpen
 	dialog.exp.refresh(fixtureDir(t), "")
