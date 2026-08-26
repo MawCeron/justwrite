@@ -40,6 +40,12 @@ var (
 	cursorStyle = lipgloss.NewStyle().Foreground(shadow).Background(goldYellow)
 	selectStyle = lipgloss.NewStyle().Foreground(ink).Background(selectBg)
 
+	// fieldCursorStyle is cursorStyle's colours swapped: bubbles' cursor.Model
+	// renders its Style with Reverse(true) applied on top, so handing it
+	// cursorStyle as-is would flip it right back to plain text on black —
+	// this is what actually comes out looking like cursorStyle once reversed.
+	fieldCursorStyle = lipgloss.NewStyle().Foreground(goldYellow).Background(shadow)
+
 	versionStyle  = lipgloss.NewStyle().Foreground(shadow).Background(harvestGold).Bold(true)
 	noteStyle     = lipgloss.NewStyle().Foreground(quiet).Background(barBg)
 	helpChipStyle = lipgloss.NewStyle().Foreground(darkGold).Background(helpChipBg)

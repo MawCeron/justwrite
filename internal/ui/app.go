@@ -82,7 +82,7 @@ func NewApp(path string) (App, error) {
 	name.Placeholder = "filename.md"
 	name.TextStyle = overlayStyle
 	name.PlaceholderStyle = overlayDimStyle
-	name.Cursor.Style = cursorStyle
+	name.Cursor.Style = fieldCursorStyle
 
 	goalInput := textinput.New()
 	goalInput.Prompt = ""
@@ -90,14 +90,14 @@ func NewApp(path string) (App, error) {
 	goalInput.CharLimit = 6
 	goalInput.TextStyle = overlayStyle
 	goalInput.PlaceholderStyle = overlayDimStyle
-	goalInput.Cursor.Style = cursorStyle
+	goalInput.Cursor.Style = fieldCursorStyle
 
 	findInput := textinput.New()
 	findInput.Prompt = ""
 	findInput.Placeholder = "search"
 	findInput.TextStyle = overlayStyle
 	findInput.PlaceholderStyle = overlayDimStyle
-	findInput.Cursor.Style = cursorStyle
+	findInput.Cursor.Style = fieldCursorStyle
 
 	// A sane size until the terminal reports its own.
 	return App{ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: loadConfig(), w: 80, h: 24}, nil
