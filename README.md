@@ -8,6 +8,8 @@ A distraction-free terminal text editor. Black screen, a centered page, and one 
 ![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=for-the-badge&logo=go&logoColor=white)
 ![Bubble Tea](https://img.shields.io/badge/Bubble%20Tea-FF69B4?style=for-the-badge)
 
+<img src="assets/justwrite.gif" alt="Typing two lines in justwrite, then naming and saving the file" width="100%">
+
 <img src="assets/writing.svg" alt="A page of text centred in a wider terminal, with a status bar at the foot showing the filename and an unsaved marker" width="100%">
 
 </div>
@@ -192,7 +194,8 @@ go build .
 
 The screens above are generated, not drawn: `./assets/screens.sh` renders the
 editor's real `View()` output to SVG, so they cannot quietly fall out of date
-with the interface. Rerun it after any change to the UI.
+with the interface. Rerun it after any change to the UI. The demo at the top
+is real too — see `assets/tapes/` for how it is recorded.
 
 ## License
 
