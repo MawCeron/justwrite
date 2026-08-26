@@ -54,6 +54,12 @@ func (e *Editor) Save() error {
 	if e.Path == "" {
 		return ErrNoPath
 	}
+	// Whatever is still mid-burst has to become part of the undo history
+	// before saved is recorded against it, or undoing those same keystrokes
+	// later would look like a return to this save rather than a departure
+	// from it.
+	e.CommitPending()
+
 	mode := os.FileMode(0o644)
 	if info, err := os.Stat(e.Path); err == nil {
 		mode = info.Mode().Perm()
@@ -93,6 +99,7 @@ func (e *Editor) Save() error {
 		return err
 	}
 	syncDir(dir)
+	e.saved = e.currentSeq()
 	e.Modified = false
 	return nil
 }

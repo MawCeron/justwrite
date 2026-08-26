@@ -36,6 +36,65 @@ func TestSaveWritesTheDocument(t *testing.T) {
 	}
 }
 
+// apply() used to mark the document modified unconditionally, so undoing
+// back to exactly what is on disk still showed the * and still asked
+// "discard changes?" on quit.
+func TestUndoBackToSavedStateClearsModified(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	e := New()
+	e.SetText("hola")
+	e.Path = path
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	e.InsertRune('!')
+	if !e.Modified {
+		t.Fatal("typing did not mark the document modified")
+	}
+
+	e.Undo()
+
+	if e.Modified {
+		t.Error("undoing back to the saved text left the modified marker on")
+	}
+	if got := e.Text(); got != "hola" {
+		t.Errorf("Text() = %q, want %q", got, "hola")
+	}
+}
+
+// A diverged history can return to the same undo depth as the save without
+// returning to the same content: undo twice, then start a different edit —
+// undoing that lands one op deep either way. Comparing which edit is on top,
+// not how many are, is what keeps that from reading as "not modified."
+func TestDivergedHistoryAtTheSameDepthIsStillModified(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	e := New()
+	e.InsertString("a")
+	e.Path = path
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	e.InsertString("b") // depth 2: "ab"
+	e.Undo()            // depth 1: "a" — back to the saved text
+	if e.Modified {
+		t.Fatal("undoing back to the saved text should have cleared Modified")
+	}
+
+	e.Undo()            // depth 0: ""
+	e.InsertString("c") // a new branch, also depth 1, but "c" was never saved
+	e.InsertString("d") // depth 2: "cd"
+	e.Undo()            // depth 1 again: "c"
+
+	if got := e.Text(); got != "c" {
+		t.Fatalf("Text() = %q, want %q (test setup check)", got, "c")
+	}
+	if !e.Modified {
+		t.Error("same undo depth as the save on a different branch, but text is \"c\" not \"a\" — should still be modified")
+	}
+}
+
 // Save() draws its temporary name from os.CreateTemp, so a file that happens
 // to already be named <doc>.tmp must not be mistaken for it and destroyed.
 func TestSaveDoesNotClobberAPreexistingTmpFile(t *testing.T) {

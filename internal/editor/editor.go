@@ -18,10 +18,15 @@ const noGoal = -1
 
 // editOp is one undoable change. insert=true means text was put in at at;
 // insert=false means text was taken out from at. Undo applies the opposite.
+// seq is when it was created — never reused, even when undo and redo move
+// the same op back and forth — so Modified can tell a genuine return to the
+// saved state apart from a diverged history that only happens to be the same
+// number of steps deep.
 type editOp struct {
 	insert bool
 	at     int
 	text   string
+	seq    int
 }
 
 type Editor struct {
@@ -42,8 +47,10 @@ type Editor struct {
 
 	clipboard string
 
-	undo []editOp
-	redo []editOp
+	undo  []editOp
+	redo  []editOp
+	seq   int // next sequence number to hand out to a new edit
+	saved int // the seq on top of undo when the document was last loaded or saved
 
 	// A burst of typed characters collapses into a single undo step, so one
 	// ctrl+z takes back a word rather than a letter. The burst is committed by
@@ -72,6 +79,8 @@ func (e *Editor) SetText(s string) {
 	e.goalCol = noGoal
 	e.undo = nil
 	e.redo = nil
+	e.seq = 0
+	e.saved = 0
 	e.pendingAt = noSel
 	e.pendingText = nil
 }
@@ -134,8 +143,7 @@ func (e *Editor) replaceSelection() {
 	}
 	e.CommitPending()
 	if deleted := e.deleteSelection(); deleted != "" {
-		e.undo = append(e.undo, editOp{at: e.cursor, text: deleted})
-		e.redo = nil
+		e.push(editOp{at: e.cursor, text: deleted})
 	}
 }
 
@@ -160,8 +168,7 @@ func (e *Editor) Cut() string {
 	}
 	text := string(e.buf[start:end])
 	e.clipboard = text
-	e.undo = append(e.undo, editOp{at: start, text: text})
-	e.redo = nil
+	e.push(editOp{at: start, text: text})
 	e.buf = slices.Delete(e.buf, start, end)
 	e.cursor = start
 	e.anchor = noSel
@@ -186,6 +193,26 @@ func (e *Editor) Paste(external string) {
 
 // ─── Undo / redo ─────────────────────────────────────────────────────────────
 
+// push adds a newly-made edit to the undo stack, tagged with a fresh
+// sequence number, and retires whatever redo history came before it — a
+// fresh edit is a new branch, not a continuation of one that was undone.
+func (e *Editor) push(op editOp) {
+	e.seq++
+	op.seq = e.seq
+	e.undo = append(e.undo, op)
+	e.redo = nil
+}
+
+// currentSeq identifies the document's current state: the seq on top of the
+// undo stack, or 0 — the same number a document starts at — once there is
+// nothing left to undo.
+func (e *Editor) currentSeq() int {
+	if len(e.undo) == 0 {
+		return 0
+	}
+	return e.undo[len(e.undo)-1].seq
+}
+
 // CommitPending flushes the current typing burst into the undo stack. It must
 // be called before anything that breaks the burst, or the burst would keep
 // growing across unrelated edits.
@@ -194,7 +221,7 @@ func (e *Editor) CommitPending() {
 		return
 	}
 	if len(e.pendingText) > 0 {
-		e.undo = append(e.undo, editOp{insert: true, at: e.pendingAt, text: string(e.pendingText)})
+		e.push(editOp{insert: true, at: e.pendingAt, text: string(e.pendingText)})
 	}
 	e.pendingAt = noSel
 	e.pendingText = nil
@@ -218,11 +245,15 @@ func (e *Editor) Redo() {
 	}
 	op := e.redo[len(e.redo)-1]
 	e.redo = e.redo[:len(e.redo)-1]
-	e.apply(op, false)
 	e.undo = append(e.undo, op)
+	e.apply(op, false)
 }
 
-// apply runs op, or its opposite when reverse is set.
+// apply runs op, or its opposite when reverse is set. Undo and redo only ever
+// move an existing op between the two stacks, so e.undo already reflects the
+// resulting position by the time this runs — comparing it against saved is
+// what tells a genuine return to the saved state apart from an edit that
+// merely landed on the same undo depth.
 func (e *Editor) apply(op editOp, reverse bool) {
 	rs := []rune(op.text)
 	if op.insert == reverse {
@@ -235,10 +266,7 @@ func (e *Editor) apply(op editOp, reverse bool) {
 		e.cursor = op.at + len(rs)
 	}
 	e.anchor = noSel
-	// ponytail: undoing back to the last saved state still counts as modified,
-	// so the * stays on. Fixing it means numbering the ops and remembering
-	// which number was saved.
-	e.Modified = true
+	e.Modified = e.currentSeq() != e.saved
 }
 
 // ─── Editing ─────────────────────────────────────────────────────────────────
@@ -287,8 +315,7 @@ func (e *Editor) insertAsOneOp(s string) {
 	e.buf = slices.Insert(e.buf, at, rs...)
 	e.cursor += len(rs)
 	e.Modified = true
-	e.undo = append(e.undo, editOp{insert: true, at: at, text: s})
-	e.redo = nil
+	e.push(editOp{insert: true, at: at, text: s})
 }
 
 func (e *Editor) Backspace() {
@@ -304,8 +331,7 @@ func (e *Editor) Backspace() {
 	e.buf = slices.Delete(e.buf, e.cursor-1, e.cursor)
 	e.cursor--
 	e.Modified = true
-	e.undo = append(e.undo, editOp{at: e.cursor, text: string(r)})
-	e.redo = nil
+	e.push(editOp{at: e.cursor, text: string(r)})
 }
 
 func (e *Editor) DeleteForward() {
@@ -320,8 +346,7 @@ func (e *Editor) DeleteForward() {
 	r := e.buf[e.cursor]
 	e.buf = slices.Delete(e.buf, e.cursor, e.cursor+1)
 	e.Modified = true
-	e.undo = append(e.undo, editOp{at: e.cursor, text: string(r)})
-	e.redo = nil
+	e.push(editOp{at: e.cursor, text: string(r)})
 }
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
@@ -495,8 +520,7 @@ func (e *Editor) DeleteWordLeft() {
 	e.buf = slices.Delete(e.buf, start, e.cursor)
 	e.cursor = start
 	e.Modified = true
-	e.undo = append(e.undo, editOp{at: start, text: text})
-	e.redo = nil
+	e.push(editOp{at: start, text: text})
 }
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
