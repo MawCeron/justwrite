@@ -413,16 +413,21 @@ func columnIn(vl VisualLine, col int) int {
 	return vl.Start + min(col, vl.End-vl.Start)
 }
 
-func (e *Editor) WordLeft(extend bool) {
-	e.beforeMove(extend)
-	pos := e.cursor
+// wordBoundaryLeft is where a word starts, scanning left from pos: past any
+// whitespace immediately before it, then past the word itself.
+func (e *Editor) wordBoundaryLeft(pos int) int {
 	for pos > 0 && unicode.IsSpace(e.buf[pos-1]) {
 		pos--
 	}
 	for pos > 0 && !unicode.IsSpace(e.buf[pos-1]) {
 		pos--
 	}
-	e.cursor = pos
+	return pos
+}
+
+func (e *Editor) WordLeft(extend bool) {
+	e.beforeMove(extend)
+	e.cursor = e.wordBoundaryLeft(e.cursor)
 }
 
 func (e *Editor) WordRight(extend bool) {
@@ -435,6 +440,28 @@ func (e *Editor) WordRight(extend bool) {
 		pos++
 	}
 	e.cursor = pos
+}
+
+// DeleteWordLeft removes the word before the cursor as a single undo step —
+// ctrl+backspace and ctrl+w, the readline alias for the same thing. A live
+// selection is deleted instead of consulting the word boundary, matching
+// Backspace and DeleteForward.
+func (e *Editor) DeleteWordLeft() {
+	e.CommitPending()
+	if _, _, ok := e.Selection(); ok {
+		e.replaceSelection()
+		return
+	}
+	start := e.wordBoundaryLeft(e.cursor)
+	if start == e.cursor {
+		return
+	}
+	text := string(e.buf[start:e.cursor])
+	e.buf = slices.Delete(e.buf, start, e.cursor)
+	e.cursor = start
+	e.Modified = true
+	e.undo = append(e.undo, editOp{at: start, text: text})
+	e.redo = nil
 }
 
 // ─── Stats ───────────────────────────────────────────────────────────────────

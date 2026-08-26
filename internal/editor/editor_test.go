@@ -147,6 +147,57 @@ func TestWordMovement(t *testing.T) {
 	}
 }
 
+// DeleteWordLeft removes the same span WordLeft would move over, in one go.
+func TestDeleteWordLeft(t *testing.T) {
+	e := New()
+	e.SetText("uno   dos tres")
+	e.cursor = 14 // end of the buffer
+
+	e.DeleteWordLeft()
+
+	if got, want := e.Text(), "uno   dos "; got != want {
+		t.Errorf("Text() = %q, want %q", got, want)
+	}
+	if e.cursor != 10 {
+		t.Errorf("cursor = %d, want 10", e.cursor)
+	}
+}
+
+// The deletion is one undo step, not one per character, the same guarantee
+// Backspace gives a typing burst.
+func TestDeleteWordLeftIsOneUndoStep(t *testing.T) {
+	e := New()
+	e.SetText("hola mundo")
+	e.cursor = len(e.Runes())
+
+	e.DeleteWordLeft()
+	if got := e.Text(); got != "hola " {
+		t.Fatalf("Text() = %q, want %q", got, "hola ")
+	}
+
+	e.Undo()
+	if got := e.Text(); got != "hola mundo" {
+		t.Errorf("Text() after undo = %q, want the word back in one step", got)
+	}
+}
+
+// A live selection takes priority over the word boundary, matching
+// Backspace and DeleteForward.
+func TestDeleteWordLeftPrefersTheSelection(t *testing.T) {
+	e := New()
+	e.SetText("uno dos tres")
+	e.cursor = 0
+	e.MoveRight(true)
+	e.MoveRight(true)
+	e.MoveRight(true) // selects "uno"
+
+	e.DeleteWordLeft()
+
+	if got, want := e.Text(), " dos tres"; got != want {
+		t.Errorf("Text() = %q, want %q", got, want)
+	}
+}
+
 // PageUp used to nudge Scroll by hand while PageDown left it entirely to
 // AdjustScroll, so paging down and back up landed the viewport one extra
 // scrollMargin higher than paging down and then walking back up would.
