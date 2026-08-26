@@ -58,12 +58,20 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `Shift+Page Up`/`Shift+Page Down` extend the selection.
+- `Shift+Page Up`/`Shift+Page Down` extend the selection
+  ([@OdaloV](https://github.com/OdaloV)).
 
 ### Fixed
 
 - Saves go through a unique temp file, preserve the original file's
   permission bits, and are fsynced before the rename into place.
+- README claimed Go 1.24+ where go.mod actually requires 1.26
+  ([@YuuGR1337](https://github.com/YuuGR1337)).
+
+### Thanks
+
+[@OdaloV](https://github.com/OdaloV) and [@YuuGR1337](https://github.com/YuuGR1337)
+for their first contributions to justwrite.
 
 ## [0.1.0] - 2026-08-10
 
