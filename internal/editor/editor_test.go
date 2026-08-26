@@ -147,6 +147,46 @@ func TestWordMovement(t *testing.T) {
 	}
 }
 
+// Passing through a short line used to permanently truncate the column: the
+// next move down recomputed the wanted column from wherever the short line
+// had just clamped the cursor to, instead of the column the user actually
+// started from.
+func TestVerticalMovementRemembersTheGoalColumn(t *testing.T) {
+	e := New()
+	e.SetText("una linea bastante larga\nla\nuna linea bastante larga tambien")
+	vlines := e.VisualLines(100) // wide enough that each line is its own row
+
+	e.cursor = 18 // column 18 on the first, long line
+
+	e.MoveDown(vlines, false)
+	if col := e.cursor - vlines[1].Start; col != 2 {
+		t.Fatalf("on the short line: column %d, want 2 (clamped to its length)", col)
+	}
+
+	e.MoveDown(vlines, false)
+	if col := e.cursor - vlines[2].Start; col != 18 {
+		t.Errorf("past the short line: column %d, want 18 (the original goal)", col)
+	}
+}
+
+// Any move that is not vertical drops the remembered goal, or the cursor
+// would keep returning to a column the user has since moved away from.
+func TestHorizontalMovementForgetsTheGoalColumn(t *testing.T) {
+	e := New()
+	e.SetText("una linea bastante larga\nla\nuna linea bastante larga tambien")
+	vlines := e.VisualLines(100)
+
+	e.cursor = 18
+	e.MoveDown(vlines, false) // goal column is now 18, cursor clamped to column 2
+
+	e.MoveLeft(false) // an explicit horizontal move
+
+	e.MoveDown(vlines, false)
+	if col := e.cursor - vlines[2].Start; col != 1 {
+		t.Errorf("column %d, want 1 (from where MoveLeft actually left the cursor)", col)
+	}
+}
+
 // DeleteWordLeft removes the same span WordLeft would move over, in one go.
 func TestDeleteWordLeft(t *testing.T) {
 	e := New()

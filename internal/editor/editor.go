@@ -13,6 +13,9 @@ import (
 // throughout — never byte indexes — so a cursor never lands mid-character.
 const noSel = -1
 
+// noGoal marks "no remembered column" in goalCol.
+const noGoal = -1
+
 // editOp is one undoable change. insert=true means text was put in at at;
 // insert=false means text was taken out from at. Undo applies the opposite.
 type editOp struct {
@@ -26,6 +29,12 @@ type Editor struct {
 	cursor int
 	anchor int
 	crlf   bool // true if the loaded file used \r\n; Save() restores it
+
+	// goalCol is the column consecutive vertical moves try to return to, so
+	// passing through a short line does not permanently forget where a
+	// longer line above or below it was. noGoal until the first vertical
+	// move, and invalidated by anything that is not one.
+	goalCol int
 
 	Path     string // "" until the document has been saved somewhere
 	Modified bool
@@ -44,7 +53,7 @@ type Editor struct {
 }
 
 func New() *Editor {
-	return &Editor{anchor: noSel, pendingAt: noSel}
+	return &Editor{anchor: noSel, pendingAt: noSel, goalCol: noGoal}
 }
 
 func (e *Editor) Text() string  { return string(e.buf) }
@@ -60,6 +69,7 @@ func (e *Editor) SetText(s string) {
 	e.anchor = noSel
 	e.Scroll = 0
 	e.crlf = false
+	e.goalCol = noGoal
 	e.undo = nil
 	e.redo = nil
 	e.pendingAt = noSel
@@ -316,9 +326,15 @@ func (e *Editor) DeleteForward() {
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 
-// beforeMove ends the typing burst and either extends or drops the selection.
-func (e *Editor) beforeMove(extend bool) {
+// beforeMove ends the typing burst and either extends or drops the
+// selection. A non-vertical move also drops the remembered goal column, so
+// the next up/down/page starts fresh from wherever the cursor actually is
+// instead of somewhere a move before it was heading.
+func (e *Editor) beforeMove(extend, vertical bool) {
 	e.CommitPending()
+	if !vertical {
+		e.goalCol = noGoal
+	}
 	if extend {
 		e.startSelection()
 	} else {
@@ -326,40 +342,57 @@ func (e *Editor) beforeMove(extend bool) {
 	}
 }
 
+// verticalCol is the column a vertical move should land on: the remembered
+// goal from an earlier vertical move in the same run, or the cursor's
+// current column when this is the first of the run — which becomes the goal
+// for whatever comes after it.
+//
+// ponytail: only moves routed through beforeMove invalidate the goal; typing
+// or deleting through a short line does not. Narrow sequence to hit (move
+// vertically, edit, move vertically again with nothing else in between) —
+// clear goalCol at the top of the editing entry points too if that turns out
+// to matter in practice.
+func (e *Editor) verticalCol(cur int, vlines []VisualLine) int {
+	if e.goalCol == noGoal {
+		e.goalCol = e.cursor - vlines[cur].Start
+	}
+	return e.goalCol
+}
+
 func (e *Editor) MoveLeft(extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	if e.cursor > 0 {
 		e.cursor--
 	}
 }
 
 func (e *Editor) MoveRight(extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	if e.cursor < len(e.buf) {
 		e.cursor++
 	}
 }
 
 func (e *Editor) MoveUp(vlines []VisualLine, extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, true)
 	cur := e.CursorVisualLine(vlines)
 	if cur == 0 || len(vlines) == 0 {
 		return
 	}
-	e.cursor = columnIn(vlines[cur-1], e.cursor-vlines[cur].Start)
+	e.cursor = columnIn(vlines[cur-1], e.verticalCol(cur, vlines))
 }
 
 func (e *Editor) MoveDown(vlines []VisualLine, extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, true)
 	cur := e.CursorVisualLine(vlines)
 	if cur+1 >= len(vlines) {
 		return
 	}
-	e.cursor = columnIn(vlines[cur+1], e.cursor-vlines[cur].Start)
+	e.cursor = columnIn(vlines[cur+1], e.verticalCol(cur, vlines))
 }
 
 func (e *Editor) Home(vlines []VisualLine, extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	if len(vlines) == 0 {
 		return
 	}
@@ -367,7 +400,7 @@ func (e *Editor) Home(vlines []VisualLine, extend bool) {
 }
 
 func (e *Editor) End(vlines []VisualLine, extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	if len(vlines) == 0 {
 		return
 	}
@@ -377,33 +410,33 @@ func (e *Editor) End(vlines []VisualLine, extend bool) {
 // DocumentHome moves to the very start of the document — ctrl+home. Home only
 // reaches the start of the current visual line.
 func (e *Editor) DocumentHome(extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	e.cursor = 0
 }
 
 // DocumentEnd moves to the very end of the document — ctrl+end.
 func (e *Editor) DocumentEnd(extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	e.cursor = len(e.buf)
 }
 
 func (e *Editor) PageUp(vlines []VisualLine, page int, extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, true)
 	if len(vlines) == 0 {
 		return
 	}
 	cur := e.CursorVisualLine(vlines)
-	col := e.cursor - vlines[cur].Start
+	col := e.verticalCol(cur, vlines)
 	e.cursor = columnIn(vlines[max(cur-page, 0)], col)
 }
 
 func (e *Editor) PageDown(vlines []VisualLine, page int, extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, true)
 	if len(vlines) == 0 {
 		return
 	}
 	cur := e.CursorVisualLine(vlines)
-	col := e.cursor - vlines[cur].Start
+	col := e.verticalCol(cur, vlines)
 	e.cursor = columnIn(vlines[min(cur+page, len(vlines)-1)], col)
 }
 
@@ -426,12 +459,12 @@ func (e *Editor) wordBoundaryLeft(pos int) int {
 }
 
 func (e *Editor) WordLeft(extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	e.cursor = e.wordBoundaryLeft(e.cursor)
 }
 
 func (e *Editor) WordRight(extend bool) {
-	e.beforeMove(extend)
+	e.beforeMove(extend, false)
 	pos := e.cursor
 	for pos < len(e.buf) && unicode.IsSpace(e.buf[pos]) {
 		pos++
