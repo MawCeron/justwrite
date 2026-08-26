@@ -16,9 +16,14 @@ type config struct {
 	DocGoal     int // total words the document is aiming for; 0 means none set
 }
 
+// userConfigDir is os.UserConfigDir, indirected so tests can point it at a
+// throwaway directory instead of reading and overwriting whatever the
+// machine running them actually has configured.
+var userConfigDir = os.UserConfigDir
+
 // configPath is where those settings live on disk.
 func configPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}

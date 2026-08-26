@@ -20,6 +20,8 @@ func init() {
 
 func testApp(t *testing.T) App {
 	t.Helper()
+	dir := t.TempDir()
+	userConfigDir = func() (string, error) { return dir, nil }
 	a, err := NewApp("")
 	if err != nil {
 		t.Fatal(err)
