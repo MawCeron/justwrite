@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,6 +25,7 @@ const (
 	ModeHelp
 	ModeAbout
 	ModeConfirm
+	ModeConflict // the file changed on disk since it was opened; ctrl+s stopped
 )
 
 // confirmation is a question whose yes answer throws something away.
@@ -130,6 +132,8 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 			return a.keyStats(msg)
 		case ModeAbout:
 			return a.keyClosePanel(msg)
+		case ModeConflict:
+			return a.keyConflict(msg)
 		}
 	}
 	return a, nil
@@ -329,6 +333,10 @@ func (a *App) saveNow() tea.Cmd {
 		return a.saveAsDialog()
 	}
 	if err := a.ed.Save(); err != nil {
+		if errors.Is(err, editor.ErrExternalChange) {
+			a.mode = ModeConflict
+			return nil
+		}
 		return a.failed(err)
 	}
 	return a.posted("saved")
@@ -538,6 +546,31 @@ func (a App) keyConfirm(msg tea.KeyMsg) (App, tea.Cmd) {
 		return a, action(&a)
 	case "n", "N", "esc":
 		a.confirm = confirmation{}
+		a.mode = ModeWrite
+	}
+	return a, nil
+}
+
+// keyConflict handles the three ways out of ErrExternalChange: take the copy
+// on disk, write over it anyway, or keep both by naming this one differently.
+func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
+	switch msg.String() {
+	case "r":
+		a.mode = ModeWrite
+		if err := a.ed.Load(a.ed.Path); err != nil {
+			return a, a.failed(err)
+		}
+		return a, a.posted("reloaded")
+	case "o":
+		a.mode = ModeWrite
+		if err := a.ed.ForceSave(); err != nil {
+			return a, a.failed(err)
+		}
+		return a, a.posted("saved")
+	case "s":
+		a.mode = ModeWrite
+		return a, a.saveAsDialog()
+	case "esc":
 		a.mode = ModeWrite
 	}
 	return a, nil

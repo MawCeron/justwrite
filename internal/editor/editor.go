@@ -6,6 +6,7 @@ package editor
 import (
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -44,6 +45,11 @@ type Editor struct {
 	Path     string // "" until the document has been saved somewhere
 	Modified bool
 	Scroll   int
+
+	// loadedModTime is what Save compares the file's mtime against to catch
+	// a change from outside justwrite. The zero value means the file did not
+	// exist the last time this was recorded.
+	loadedModTime time.Time
 
 	clipboard string
 
@@ -93,6 +99,7 @@ func (e *Editor) SetText(s string) {
 	e.pendingText = nil
 	e.pendingDelete = false
 	e.openWords = e.WordCount()
+	e.loadedModTime = time.Time{}
 }
 
 // NewDocument resets to a blank, unnamed document.

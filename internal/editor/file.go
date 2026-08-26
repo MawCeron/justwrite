@@ -9,11 +9,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // ErrNoPath means the document has never been named, so the caller should ask
 // for a filename instead of saving.
 var ErrNoPath = errors.New("the document has no filename yet")
+
+// ErrExternalChange means the file moved on disk since it was loaded — a
+// sync, another process, another justwrite — so Save refused to write
+// through it. The caller decides: reload and lose local edits, overwrite
+// anyway with ForceSave, or save under a different name.
+var ErrExternalChange = errors.New("the file on disk has changed since it was opened")
 
 // Load reads path into the document. A file that does not exist yet is not an
 // error: the name is kept so ctrl+s saves straight to it, instead of dropping
@@ -33,7 +40,31 @@ func (e *Editor) Load(path string) error {
 	}
 	e.Path = path
 	e.Modified = false
+	e.refreshLoadedStat()
 	return nil
+}
+
+// refreshLoadedStat remembers the on-disk state Save compares against. The
+// zero time stands for "did not exist" — a file that does not exist either
+// side of that comparison is not a conflict, but one that exists on only one
+// side is.
+func (e *Editor) refreshLoadedStat() {
+	info, err := os.Stat(e.Path)
+	if err != nil {
+		e.loadedModTime = time.Time{}
+		return
+	}
+	e.loadedModTime = info.ModTime()
+}
+
+// externalChange reports whether the file has moved on disk since it was
+// last loaded or saved.
+func (e *Editor) externalChange() bool {
+	info, err := os.Stat(e.Path)
+	if err != nil {
+		return !e.loadedModTime.IsZero()
+	}
+	return !info.ModTime().Equal(e.loadedModTime)
 }
 
 // normalizeLineEndings converts CRLF (and a stray lone CR) to LF for the
@@ -47,13 +78,31 @@ func normalizeLineEndings(s string) (text string, crlf bool) {
 	return s, crlf
 }
 
-// Save writes the document through a temporary file in the same directory and
-// renames it into place. The rename is atomic, so an interrupted or failed
-// write can never leave a half-written draft where the finished one was.
+// Save writes the document through a temporary file in the same directory
+// and renames it into place, refusing if the file changed on disk since it
+// was opened — see ErrExternalChange. The rename is atomic, so an
+// interrupted or failed write can never leave a half-written draft where the
+// finished one was.
 func (e *Editor) Save() error {
 	if e.Path == "" {
 		return ErrNoPath
 	}
+	if e.externalChange() {
+		return ErrExternalChange
+	}
+	return e.writeFile()
+}
+
+// ForceSave writes the document regardless of what changed on disk — the
+// "overwrite anyway" choice after Save returns ErrExternalChange.
+func (e *Editor) ForceSave() error {
+	if e.Path == "" {
+		return ErrNoPath
+	}
+	return e.writeFile()
+}
+
+func (e *Editor) writeFile() error {
 	// Whatever is still mid-burst has to become part of the undo history
 	// before saved is recorded against it, or undoing those same keystrokes
 	// later would look like a return to this save rather than a departure
@@ -101,6 +150,7 @@ func (e *Editor) Save() error {
 	syncDir(dir)
 	e.saved = e.currentSeq()
 	e.Modified = false
+	e.refreshLoadedStat()
 	return nil
 }
 
@@ -121,10 +171,14 @@ func syncDir(dir string) {
 
 // SaveAs names the document and saves it. The name only sticks if the write
 // succeeded, so a failed save leaves the document exactly as it was.
+//
+// This skips the ErrExternalChange check: naming a document is a deliberate
+// choice already confirmed at the dialog (overwriting an existing file there
+// asks first), not the silent ctrl+s Save guards against.
 func (e *Editor) SaveAs(path string) error {
 	previous := e.Path
 	e.Path = path
-	if err := e.Save(); err != nil {
+	if err := e.writeFile(); err != nil {
 		e.Path = previous
 		return err
 	}

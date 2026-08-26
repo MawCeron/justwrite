@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -262,7 +263,10 @@ func TestQuestionMarkTypesWhileWriting(t *testing.T) {
 // A save that fails without saying so is a draft lost quietly.
 func TestAFailedSaveShowsUpOnTheBar(t *testing.T) {
 	a := testApp(t)
-	a.ed.Path = t.TempDir() // a directory can never be written as a file
+	// A parent directory that does not exist fails the write itself, rather
+	// than tripping the external-change guard the way a path that already
+	// exists on disk (e.g. a bare directory) would.
+	a.ed.Path = filepath.Join(t.TempDir(), "no-such-dir", "nota.md")
 	a = typeRunes(a, "hola")
 
 	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
@@ -291,6 +295,119 @@ func TestSavingAKnownFile(t *testing.T) {
 	}
 	if a.status != "saved" {
 		t.Errorf("status = %q, want %q", a.status, "saved")
+	}
+}
+
+// touchExternally opens path via a in place of the app's own document, then
+// simulates something else changing it afterward — another editor, a sync
+// client — so the next ctrl+s should hit the conflict panel instead of
+// writing through it.
+func touchExternally(t *testing.T, a App, path, diskContent string) App {
+	t.Helper()
+	if err := a.ed.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	future := time.Now().Add(time.Hour)
+	if err := os.WriteFile(path, []byte(diskContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func TestCtrlSOpensTheConflictPanel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := touchExternally(t, testApp(t), path, "changed elsewhere")
+	a = typeRunes(a, " editado")
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	if a.mode != ModeConflict {
+		t.Fatalf("mode = %v, want ModeConflict", a.mode)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "changed elsewhere" {
+		t.Errorf("file = %q, want the external change left alone", b)
+	}
+}
+
+func TestConflictReloadTakesTheDiskVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := touchExternally(t, testApp(t), path, "changed elsewhere")
+	a = typeRunes(a, " editado")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v, want ModeWrite", a.mode)
+	}
+	if got := a.ed.Text(); got != "changed elsewhere" {
+		t.Errorf("Text() = %q, want the reloaded content", got)
+	}
+}
+
+func TestConflictOverwriteKeepsLocalEdits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := touchExternally(t, testApp(t), path, "changed elsewhere")
+	a = typeRunes(a, " editado")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v, want ModeWrite", a.mode)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "original editado" {
+		t.Errorf("file = %q, want the local edits written through", b)
+	}
+}
+
+func TestConflictSaveAsOpensTheDialog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := touchExternally(t, testApp(t), path, "changed elsewhere")
+	a = typeRunes(a, " editado")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+
+	if a.mode != ModeSaveAs {
+		t.Errorf("mode = %v, want ModeSaveAs", a.mode)
+	}
+}
+
+func TestConflictEscCancelsWithoutWritingAnything(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := touchExternally(t, testApp(t), path, "changed elsewhere")
+	a = typeRunes(a, " editado")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v, want ModeWrite", a.mode)
+	}
+	if got := a.ed.Text(); got != "original editado" {
+		t.Errorf("Text() = %q, want the local edits kept in memory", got)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "changed elsewhere" {
+		t.Errorf("file = %q, want untouched", b)
 	}
 }
 

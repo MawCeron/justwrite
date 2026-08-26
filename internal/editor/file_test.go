@@ -2,10 +2,12 @@ package editor
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestSaveWritesTheDocument(t *testing.T) {
@@ -130,8 +132,10 @@ func TestSavePreservesFileMode(t *testing.T) {
 	}
 
 	e := New()
-	e.SetText("secreto nuevo")
-	e.Path = path
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	e.InsertString(" nuevo")
 	if err := e.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -142,6 +146,123 @@ func TestSavePreservesFileMode(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("mode = %o, want 0600", got)
+	}
+}
+
+// Save must not clobber a file that changed on disk after it was opened —
+// another editor, a sync client, another justwrite instance.
+func TestSaveRefusesAfterAnExternalChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	e.InsertString(" editado")
+
+	// Something else touched the file after it was opened here. Chtimes
+	// rather than a second WriteFile: a filesystem's mtime resolution can be
+	// coarser than how fast two writes in a test run apart.
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.Save(); !errors.Is(err, ErrExternalChange) {
+		t.Fatalf("Save() = %v, want ErrExternalChange", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "original" {
+		t.Errorf("the file on disk changed to %q, want it left alone", b)
+	}
+}
+
+// The ordinary path — open a file, edit it, save it, nothing else touches it
+// — must not be affected by the guard against everything else.
+func TestSaveSucceedsWithoutAnExternalChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	e.InsertString(" editado")
+
+	if err := e.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "original editado" {
+		t.Errorf("file = %q, want %q", b, "original editado")
+	}
+}
+
+// ForceSave is the "overwrite anyway" choice: it writes through the conflict
+// Save just refused.
+func TestForceSaveOverwritesDespiteAnExternalChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	e.InsertString(" editado")
+
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.ForceSave(); err != nil {
+		t.Fatalf("ForceSave: %v", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "original editado" {
+		t.Errorf("file = %q, want %q", b, "original editado")
+	}
+
+	// The just-written state becomes the new baseline — saving again right
+	// after must not immediately refuse itself.
+	if err := e.Save(); err != nil {
+		t.Errorf("Save() after ForceSave = %v, want nil", err)
+	}
+}
+
+// Reloading after a conflict picks up the change and clears it — Save
+// works normally again once the document matches what is on disk.
+func TestReloadClearsTheConflict(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	future := time.Now().Add(time.Hour)
+	if err := os.WriteFile(path, []byte("changed elsewhere"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.Load(path); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := e.Text(); got != "changed elsewhere" {
+		t.Fatalf("Text() = %q, want the reloaded content", got)
+	}
+	if err := e.Save(); err != nil {
+		t.Errorf("Save() after reload = %v, want nil", err)
 	}
 }
 
@@ -171,7 +292,11 @@ func TestAFailedSaveLeavesTheOriginalAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := e.Save(); err == nil {
+	// ForceSave, not Save: this is exercising the write failing, which has
+	// nothing to do with ErrExternalChange — Save would also (correctly)
+	// refuse here, but for the unrelated reason that blocked was never
+	// loaded, muddying what this test is actually checking.
+	if err := e.ForceSave(); err == nil {
 		t.Fatal("saving onto a directory should fail")
 	}
 	if e.Modified != true {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -18,6 +19,8 @@ func (a App) panel() string {
 		return a.statsPanel()
 	case ModeConfirm:
 		return a.confirmPanel()
+	case ModeConflict:
+		return a.conflictPanel()
 	case ModeOpen, ModeSaveAs:
 		return a.filePanel()
 	}
@@ -287,6 +290,25 @@ func (a App) confirmPanel() string {
 	body := []string{
 		"",
 		overlayStyle.Render("  " + a.confirm.message),
+		"",
+		keys,
+		"",
+	}
+	return panelBox("", "", body, width)
+}
+
+// conflictPanel is what ErrExternalChange looks like: the file changed on
+// disk since this document was opened, and ctrl+s stopped rather than
+// picking a side for you.
+func (a App) conflictPanel() string {
+	width := min(a.panelWidth(), 56)
+	keys := overlayStyle.Render("  r") + overlayDimStyle.Render(" reload    ") +
+		overlayStyle.Render("o") + overlayDimStyle.Render(" overwrite    ") +
+		overlayStyle.Render("s") + overlayDimStyle.Render(" save as")
+	body := []string{
+		"",
+		overlayStyle.Render("  " + filepath.Base(a.ed.Path) + " changed on disk"),
+		overlayDimStyle.Render("  since it was opened here."),
 		"",
 		keys,
 		"",
