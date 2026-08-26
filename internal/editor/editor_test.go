@@ -373,3 +373,30 @@ func TestStats(t *testing.T) {
 		t.Errorf("empty ReadingTime = (%d, %v), want (0, true)", mins, underOne)
 	}
 }
+
+// SessionWords reports what changed since the document was opened, not what
+// the whole document holds.
+func TestSessionWords(t *testing.T) {
+	e := New()
+	e.SetText("uno dos") // the moment the "document" is considered opened
+
+	typeText(e, " tres")
+
+	if got := e.SessionWords(); got != 1 {
+		t.Errorf("SessionWords() = %d, want 1", got)
+	}
+}
+
+// A session that mostly deletes reports a negative count rather than
+// clamping at zero, so "wrote nothing" and "deleted a paragraph" don't look
+// the same.
+func TestSessionWordsCanGoNegative(t *testing.T) {
+	e := New()
+	e.SetText("uno dos tres") // cursor lands at the end
+
+	e.DeleteWordLeft() // removes "tres"
+
+	if got := e.SessionWords(); got != -1 {
+		t.Errorf("SessionWords() = %d, want -1", got)
+	}
+}

@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -54,6 +55,10 @@ type App struct {
 
 	helpScroll int // how many shortcut cards have scrolled off the top
 
+	cfg         config
+	goalInput   textinput.Model
+	editingGoal goalField // stats: which goal field has the focus, if any
+
 	title string // last title handed to the terminal
 }
 
@@ -72,8 +77,16 @@ func NewApp(path string) (App, error) {
 	name.PlaceholderStyle = overlayDimStyle
 	name.Cursor.Style = cursorStyle
 
+	goalInput := textinput.New()
+	goalInput.Prompt = ""
+	goalInput.Placeholder = "500"
+	goalInput.CharLimit = 6
+	goalInput.TextStyle = overlayStyle
+	goalInput.PlaceholderStyle = overlayDimStyle
+	goalInput.Cursor.Style = cursorStyle
+
 	// A sane size until the terminal reports its own.
-	return App{ed: ed, name: name, w: 80, h: 24}, nil
+	return App{ed: ed, name: name, goalInput: goalInput, cfg: loadConfig(), w: 80, h: 24}, nil
 }
 
 func (a App) Init() tea.Cmd { return nil }
@@ -113,7 +126,9 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 			return a.keyConfirm(msg)
 		case ModeHelp:
 			return a.keyHelp(msg)
-		case ModeAbout, ModeStats:
+		case ModeStats:
+			return a.keyStats(msg)
+		case ModeAbout:
 			return a.keyClosePanel(msg)
 		}
 	}
@@ -554,4 +569,74 @@ func (a App) keyClosePanel(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.mode = ModeWrite
 	}
 	return a, nil
+}
+
+// goalField is which of the two goals the stats panel's input row is
+// currently editing, if either.
+type goalField int
+
+const (
+	noGoalField goalField = iota
+	sessionGoalField
+	docGoalField
+)
+
+// parseGoalInput reads the typed number: empty means "clear the goal", a
+// valid non-negative integer becomes the new one, and anything else — bad
+// input — leaves the previous value alone rather than zeroing it out.
+func parseGoalInput(v string) (n int, ok bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(v)
+	return n, err == nil && n >= 0
+}
+
+// keyStats handles the stats panel, including setting the session and
+// document word goals — the settings justwrite has, changed from inside the
+// app rather than by hand-editing a file.
+func (a App) keyStats(msg tea.KeyMsg) (App, tea.Cmd) {
+	if a.editingGoal != noGoalField {
+		switch msg.String() {
+		case "enter":
+			if n, ok := parseGoalInput(a.goalInput.Value()); ok {
+				switch a.editingGoal {
+				case sessionGoalField:
+					a.cfg.SessionGoal = n
+				case docGoalField:
+					a.cfg.DocGoal = n
+				}
+				a.cfg.save()
+			}
+			a.goalInput.Blur()
+			a.editingGoal = noGoalField
+		case "esc":
+			a.goalInput.Blur()
+			a.editingGoal = noGoalField
+		default:
+			var cmd tea.Cmd
+			a.goalInput, cmd = a.goalInput.Update(msg)
+			return a, cmd
+		}
+		return a, nil
+	}
+
+	startEditing := func(field goalField, current int) (App, tea.Cmd) {
+		a.goalInput.SetValue("")
+		if current > 0 {
+			a.goalInput.SetValue(strconv.Itoa(current))
+		}
+		a.goalInput.CursorEnd()
+		a.editingGoal = field
+		return a, a.goalInput.Focus()
+	}
+
+	switch msg.String() {
+	case "g":
+		return startEditing(sessionGoalField, a.cfg.SessionGoal)
+	case "d":
+		return startEditing(docGoalField, a.cfg.DocGoal)
+	}
+	return a.keyClosePanel(msg)
 }

@@ -60,6 +60,11 @@ type Editor struct {
 	pendingAt     int
 	pendingText   []rune
 	pendingDelete bool
+
+	// openWords is the word count at the moment the document was last loaded
+	// or reset, so the stats panel can report what changed this session
+	// rather than what the whole document holds.
+	openWords int
 }
 
 func New() *Editor {
@@ -87,6 +92,7 @@ func (e *Editor) SetText(s string) {
 	e.pendingAt = noSel
 	e.pendingText = nil
 	e.pendingDelete = false
+	e.openWords = e.WordCount()
 }
 
 // NewDocument resets to a blank, unnamed document.
@@ -541,6 +547,10 @@ func (e *Editor) DeleteWordLeft() {
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
 func (e *Editor) WordCount() int { return len(strings.Fields(string(e.buf))) }
+
+// SessionWords is how many words have been added since the document was
+// opened — negative if the session was mostly deleting rather than writing.
+func (e *Editor) SessionWords() int { return e.WordCount() - e.openWords }
 
 func (e *Editor) CharCount() int {
 	n := 0

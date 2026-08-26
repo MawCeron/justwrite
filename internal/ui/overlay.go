@@ -244,15 +244,38 @@ func (a App) statsPanel() string {
 	row := func(label, value string) string {
 		return overlayDimStyle.Render(fmt.Sprintf("  %-12s", label)) + overlayStyle.Render(value)
 	}
+
+	words := fmt.Sprint(a.ed.WordCount())
+	if a.cfg.DocGoal > 0 {
+		words = fmt.Sprintf("%d / %d", a.ed.WordCount(), a.cfg.DocGoal)
+	}
+
+	session := fmt.Sprintf("%+d", a.ed.SessionWords())
+	if a.cfg.SessionGoal > 0 {
+		session = fmt.Sprintf("%d / %d", a.ed.SessionWords(), a.cfg.SessionGoal)
+	}
+
 	body := []string{
 		"",
-		row("words", fmt.Sprint(a.ed.WordCount())),
+		row("words", words),
 		row("characters", fmt.Sprint(a.ed.CharCount())),
 		row("pages", fmt.Sprint(a.ed.PageCount(a.textHeight(), a.textWidth()))),
 		row("read time", read),
+		row("session", session),
 		"",
 	}
-	return panelBox("stats", "", body, width)
+
+	footer := "g session goal  d document goal"
+	if a.editingGoal != noGoalField {
+		footer = "enter save  esc cancel"
+		fieldLabel := "session"
+		if a.editingGoal == docGoalField {
+			fieldLabel = "words"
+		}
+		label := overlayStyle.Render(fmt.Sprintf("  %-12s", fieldLabel))
+		body = append(body, divider, fitCell(label+a.goalInput.View(), width, overlayStyle.Render))
+	}
+	return panelBox("stats", footer, body, width)
 }
 
 // ─── Confirmations ───────────────────────────────────────────────────────────

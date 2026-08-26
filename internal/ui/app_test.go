@@ -129,6 +129,97 @@ func TestHelpAndAbout(t *testing.T) {
 	}
 }
 
+// The session and document word goals are the settings justwrite has, and
+// they are changed from inside the stats panel rather than by hand-editing a
+// file.
+func TestSetSessionGoalFromStatsPanel(t *testing.T) {
+	withTempConfigDir(t)
+	a, _ := press(testApp(t), tea.KeyMsg{Type: tea.KeyCtrlT})
+	if a.mode != ModeStats {
+		t.Fatalf("ctrl+t gave mode %v, want ModeStats", a.mode)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if a.editingGoal != sessionGoalField {
+		t.Fatal("g did not start editing the session goal")
+	}
+
+	a = typeRunes(a, "500")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if a.editingGoal != noGoalField {
+		t.Error("enter did not stop editing")
+	}
+	if a.cfg.SessionGoal != 500 {
+		t.Errorf("cfg.SessionGoal = %d, want 500", a.cfg.SessionGoal)
+	}
+	if c := loadConfig(); c.SessionGoal != 500 {
+		t.Errorf("persisted SessionGoal = %d, want 500 — the point is it survives a restart", c.SessionGoal)
+	}
+}
+
+// The document goal is a separate setting from the session goal — a book's
+// total length target rather than a single sitting's.
+func TestSetDocGoalFromStatsPanel(t *testing.T) {
+	withTempConfigDir(t)
+	a, _ := press(testApp(t), tea.KeyMsg{Type: tea.KeyCtrlT})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if a.editingGoal != docGoalField {
+		t.Fatal("d did not start editing the document goal")
+	}
+
+	a = typeRunes(a, "50000")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if a.cfg.DocGoal != 50000 {
+		t.Errorf("cfg.DocGoal = %d, want 50000", a.cfg.DocGoal)
+	}
+	if a.cfg.SessionGoal != 0 {
+		t.Errorf("cfg.SessionGoal = %d, want 0 — setting the doc goal must not touch it", a.cfg.SessionGoal)
+	}
+	if c := loadConfig(); c.DocGoal != 50000 {
+		t.Errorf("persisted DocGoal = %d, want 50000", c.DocGoal)
+	}
+}
+
+func TestEscCancelsGoalEditingWithoutChanging(t *testing.T) {
+	withTempConfigDir(t)
+	a := testApp(t)
+	a.cfg.SessionGoal = 200
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlT})
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	a = typeRunes(a, "999")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	if a.editingGoal != noGoalField {
+		t.Error("esc did not stop editing")
+	}
+	if a.cfg.SessionGoal != 200 {
+		t.Errorf("cfg.SessionGoal = %d, want unchanged 200", a.cfg.SessionGoal)
+	}
+}
+
+// An empty field clears the goal rather than being rejected as invalid — not
+// wanting a target anymore is a valid choice.
+func TestClearingTheGoalInputSetsNoGoal(t *testing.T) {
+	withTempConfigDir(t)
+	a := testApp(t)
+	a.cfg.SessionGoal = 500
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlT})
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	for range 3 { // clear the prefilled "500"
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if a.cfg.SessionGoal != 0 {
+		t.Errorf("cfg.SessionGoal = %d, want 0 (cleared)", a.cfg.SessionGoal)
+	}
+}
+
 // The shortcut list no longer fits in one screenful, so it scrolls — but
 // never past either end.
 func TestHelpScrolls(t *testing.T) {
