@@ -603,6 +603,37 @@ func TestFindTwoPhaseFlow(t *testing.T) {
 	}
 }
 
+// tab goes back to the query field to search for something else, without
+// having to close and reopen find.
+func TestFindTabReturnsToTheQueryField(t *testing.T) {
+	a := testApp(t)
+	a.ed.SetText("uno dos tres")
+	a.ed.SetCursor(0)
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlF})
+	a = typeRunes(a, "uno")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if a.onFindQuery {
+		t.Fatal("still on the query field right after enter")
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyTab})
+	if !a.onFindQuery {
+		t.Fatal("tab did not return focus to the query field")
+	}
+
+	// The old query is replaced by a new one, typed from scratch.
+	for range 3 {
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	a = typeRunes(a, "tres")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if start, end, ok := a.ed.Selection(); !ok || start != 8 || end != 12 {
+		t.Fatalf("selection (%d,%d,%v), want (8,12,true) — tres", start, end, ok)
+	}
+}
+
 // esc restores the cursor to wherever it was before the search started,
 // undoing the navigation rather than leaving it on the last match.
 func TestEscRestoresTheCursorAfterFind(t *testing.T) {

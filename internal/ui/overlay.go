@@ -332,5 +332,5 @@ func (a App) findPanel() string {
 		fitCell(label+a.findInput.View(), width, overlayStyle.Render),
 		"",
 	}
-	return panelBox("", "enter/n next  N prev  esc close", body, width)
+	return panelBox("", "enter/n next  N prev  tab edit  esc close", body, width)
 }

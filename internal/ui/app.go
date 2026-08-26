@@ -624,11 +624,22 @@ func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
 // two-phase shape a shell's reverse search uses, so "n" and "N" are free for
 // navigation once there is something to navigate.
 func (a App) keyFind(msg tea.KeyMsg) (App, tea.Cmd) {
-	if msg.String() == "esc" {
+	switch msg.String() {
+	case "esc":
 		a.ed.SetCursor(a.findOrigin)
 		a.findInput.Blur()
 		a.onFindQuery = false
 		a.mode = ModeWrite
+		return a, nil
+	case "tab":
+		// Back to the field to change the query, without closing and
+		// reopening find just to search for something else.
+		a.onFindQuery = !a.onFindQuery
+		if a.onFindQuery {
+			a.findInput.CursorEnd()
+			return a, a.findInput.Focus()
+		}
+		a.findInput.Blur()
 		return a, nil
 	}
 
