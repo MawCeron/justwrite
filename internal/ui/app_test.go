@@ -129,6 +129,33 @@ func TestHelpAndAbout(t *testing.T) {
 	}
 }
 
+// The shortcut list no longer fits in one screenful, so it scrolls — but
+// never past either end.
+func TestHelpScrolls(t *testing.T) {
+	a, _ := press(testApp(t), tea.KeyMsg{Type: tea.KeyF1})
+
+	wantMax := helpMaxScroll(a.helpVisibleBands())
+
+	for range helpBandCount() + 5 {
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	if a.helpScroll != wantMax {
+		t.Errorf("helpScroll = %d after scrolling well past the end, want %d (clamped)", a.helpScroll, wantMax)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyPgUp})
+	if a.helpScroll != 0 {
+		t.Errorf("helpScroll = %d after paging up from the end, want 0", a.helpScroll)
+	}
+
+	for range helpBandCount() + 5 {
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyUp})
+	}
+	if a.helpScroll != 0 {
+		t.Errorf("helpScroll = %d after scrolling well past the start, want 0 (clamped)", a.helpScroll)
+	}
+}
+
 // ? is a character before it is a shortcut: this is an editor.
 func TestQuestionMarkTypesWhileWriting(t *testing.T) {
 	a := typeRunes(testApp(t), "¿qué?")

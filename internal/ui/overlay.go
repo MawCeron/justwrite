@@ -105,11 +105,11 @@ func fitCell(s string, width int, pad func(...string) string) string {
 
 // ─── Help ────────────────────────────────────────────────────────────────────
 
-// The shortcuts, in the order they are worth learning.
+// The shortcuts, in the order they are worth learning. {key, description}.
 var shortcuts = [][2]string{
 	{"ctrl+s", "save"},
-	{"ctrl+o", "open"},
-	{"ctrl+n", "new"},
+	{"ctrl+o", "open a file"},
+	{"ctrl+n", "new document"},
 	{"ctrl+q", "quit"},
 	{"ctrl+z", "undo"},
 	{"ctrl+y", "redo"},
@@ -117,55 +117,65 @@ var shortcuts = [][2]string{
 	{"ctrl+c", "copy"},
 	{"ctrl+x", "cut"},
 	{"ctrl+v", "paste"},
-	{"ctrl+t", "stats"},
-	{"ctrl+←→", "jump word"},
-	{"shift+↑↓←→", "select"},
-	{"pgup/pgdn", "scroll"},
-	{"shift+pgup/pgdn", "select"},
-	{"ctrl+home/end", "start/end"},
-	{"ctrl+shift+home/end", "select"},
+	{"ctrl+t", "word count & stats"},
+	{"ctrl+←→", "jump a word"},
+	{"shift+↑↓←→", "extend selection"},
+	{"pgup/pgdn", "scroll a page"},
+	{"shift+pgup/pgdn", "extend selection"},
+	{"ctrl+home/end", "jump to start or end"},
+	{"ctrl+shift+home/end", "extend to start or end"},
 	{"tab", "insert 4 spaces"},
 	{"esc", "close panel"},
+}
+
+// helpBandCount is how many two-column bands the shortcut list draws into,
+// one card from the left half paired with one from the right.
+func helpBandCount() int { return (len(shortcuts) + 1) / 2 }
+
+// helpVisibleBands is how many of those bands fit in the panel at once — the
+// two blank padding lines come out of the same budget as the cards, and each
+// card is two lines tall (description, then key).
+func (a App) helpVisibleBands() int {
+	return max((a.panelHeight()-2)/2, 1)
+}
+
+// helpMaxScroll is the last scroll offset that still has a full window of
+// bands to show, so scrolling can never run past the end of the list.
+func helpMaxScroll(visible int) int {
+	return max(helpBandCount()-visible, 0)
 }
 
 func (a App) helpPanel() string {
 	width := a.panelWidth()
 
-	// helpGap is the breathing room after the longest key in a column — more
-	// than the one space alignment alone requires, so the table reads as a
-	// table rather than a packed list.
-	const helpGap = 2
+	// helpGap is the breathing room between the two card columns.
+	const helpGap = 5
 
-	cell := func(s [2]string, keyWidth int) string {
-		gap := max(keyWidth-ansi.StringWidth(s[0]), 0) + helpGap
-		// The indent is inside the styled run: two bare spaces would show the
-		// terminal's own background as a notch in the panel.
-		return overlayStyle.Render("  "+s[0]) + overlayDimStyle.Render(strings.Repeat(" ", gap)+s[1])
-	}
-
-	// keyWidth is the longest key in list; cellWidth is the widest rendered
-	// cell that column will ever draw, both computed rather than guessed, so
-	// a longer shortcut can only widen its own column instead of silently
-	// misaligning or overflowing it.
-	keyWidth := func(list [][2]string) int {
+	// Each shortcut is a two-line card: the description on top, in the
+	// brighter ink since that is what you scan for, and the key underneath
+	// it in the quieter tone — a reference once you already know what you
+	// want.
+	colWidth := func(list [][2]string) int {
 		w := 0
 		for _, s := range list {
-			w = max(w, ansi.StringWidth(s[0]))
+			w = max(w, ansi.StringWidth(s[0]), ansi.StringWidth(s[1]))
 		}
 		return w
 	}
-	cellWidth := func(list [][2]string, kw int) int {
-		w := 0
-		for _, s := range list {
-			w = max(w, 2+kw+helpGap+ansi.StringWidth(s[1]))
-		}
-		return w
+	desc := func(s [2]string, w int) string {
+		return fitCell(overlayStyle.Render("  "+s[1]), w+2, overlayStyle.Render)
+	}
+	key := func(s [2]string, w int) string {
+		return fitCell(overlayDimStyle.Render("  "+s[0]), w+2, overlayDimStyle.Render)
 	}
 
-	rows := (len(shortcuts) + 1) / 2
-	left, right := shortcuts[:rows], shortcuts[rows:]
-	leftKey, rightKey := keyWidth(left), keyWidth(right)
-	leftWidth, rightWidth := cellWidth(left, leftKey), cellWidth(right, rightKey)
+	bands := helpBandCount()
+	left, right := shortcuts[:bands], shortcuts[bands:]
+	leftWidth, rightWidth := colWidth(left), colWidth(right)
+
+	visible := a.helpVisibleBands()
+	scroll := min(a.helpScroll, helpMaxScroll(visible))
+	end := min(scroll+visible, bands)
 
 	var body []string
 	body = append(body, "")
@@ -173,29 +183,30 @@ func (a App) helpPanel() string {
 	// Two columns only when both actually fit at their natural width — the
 	// short "ctrl+X" column and the longer movement-key column need
 	// different amounts of room, not an even half each.
-	if width >= leftWidth+rightWidth {
-		for i, s := range left {
-			line := fitCell(cell(s, leftKey), leftWidth, overlayStyle.Render)
+	twoCol := width >= 2*2+leftWidth+rightWidth+helpGap
+	kw := max(leftWidth, rightWidth)
+	for i := scroll; i < end; i++ {
+		if twoCol {
+			descLine, keyLine := desc(left[i], leftWidth), key(left[i], leftWidth)
 			if i < len(right) {
-				line += cell(right[i], rightKey)
+				gap := overlayStyle.Render(strings.Repeat(" ", helpGap))
+				descLine += gap + desc(right[i], rightWidth)
+				keyLine += gap + key(right[i], rightWidth)
 			}
-			body = append(body, line)
-		}
-	} else {
-		kw := max(leftKey, rightKey)
-		for _, s := range shortcuts {
-			body = append(body, cell(s, kw))
+			body = append(body, descLine, keyLine)
+		} else {
+			body = append(body, desc(left[i], kw), key(left[i], kw))
+			if i < len(right) {
+				body = append(body, desc(right[i], kw), key(right[i], kw))
+			}
 		}
 	}
 
 	body = append(body, "")
 
-	// On a terminal too short for the whole list, say so rather than pretend
-	// these are all the keys there are.
 	footer := "? about"
-	if maxRows := a.panelHeight(); len(body) > maxRows {
-		body = body[:maxRows]
-		footer = "…  " + footer
+	if scroll > 0 || end < bands {
+		footer = "↑↓ more  " + footer
 	}
 	return panelBox("help", footer, body, width)
 }

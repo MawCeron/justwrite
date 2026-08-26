@@ -52,6 +52,8 @@ type App struct {
 	name   textinput.Model
 	onName bool // save-as: the filename field has the focus, not the listing
 
+	helpScroll int // how many shortcut cards have scrolled off the top
+
 	title string // last title handed to the terminal
 }
 
@@ -170,6 +172,7 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.mode = ModeStats
 	case "f1":
 		a.mode = ModeHelp
+		a.helpScroll = 0
 
 	// ── Navigation ──
 	case "ctrl+left":
@@ -524,12 +527,21 @@ func (a App) keyConfirm(msg tea.KeyMsg) (App, tea.Cmd) {
 }
 
 func (a App) keyHelp(msg tea.KeyMsg) (App, tea.Cmd) {
+	visible := a.helpVisibleBands()
 	switch msg.String() {
 	case "?":
 		// Only here: while writing, ? is a question mark like any other.
 		a.mode = ModeAbout
 	case "f1", "esc", "enter", "q":
 		a.mode = ModeWrite
+	case "up":
+		a.helpScroll = max(a.helpScroll-1, 0)
+	case "down":
+		a.helpScroll = min(a.helpScroll+1, helpMaxScroll(visible))
+	case "pgup":
+		a.helpScroll = max(a.helpScroll-visible, 0)
+	case "pgdown":
+		a.helpScroll = min(a.helpScroll+visible, helpMaxScroll(visible))
 	}
 	return a, nil
 }
