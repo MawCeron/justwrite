@@ -11,6 +11,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func init() {
+	// isQuit below executes a command's returned tea.Cmd synchronously to
+	// look inside it; a real blink-tick cmd riding along would otherwise
+	// make every such test wait out a real blink cycle for nothing.
+	cursorBlinkSpeed = time.Nanosecond
+}
+
 func testApp(t *testing.T) App {
 	t.Helper()
 	a, err := NewApp("")
@@ -24,6 +31,59 @@ func testApp(t *testing.T) App {
 func press(a App, msg tea.KeyMsg) (App, tea.Cmd) {
 	m, cmd := a.Update(msg)
 	return m.(App), cmd
+}
+
+// The cursor starts visible and toggles with each matching tick.
+func TestCursorBlinkToggles(t *testing.T) {
+	a := testApp(t)
+	if !a.cursorBlink {
+		t.Fatal("cursorBlink = false, want true on a fresh App")
+	}
+
+	m, _ := a.Update(blinkCursor(a.blinkSeq))
+	a = m.(App)
+	if a.cursorBlink {
+		t.Error("cursorBlink = true after one tick, want false")
+	}
+
+	m, _ = a.Update(blinkCursor(a.blinkSeq))
+	a = m.(App)
+	if !a.cursorBlink {
+		t.Error("cursorBlink = false after two ticks, want true")
+	}
+}
+
+// Typing keeps the cursor solid and starts a fresh cycle, so a keystroke
+// never lands while the cursor happens to be in its invisible phase.
+func TestTypingResetsTheBlink(t *testing.T) {
+	a := testApp(t)
+	m, _ := a.Update(blinkCursor(a.blinkSeq))
+	a = m.(App)
+	if a.cursorBlink {
+		t.Fatal("test setup: expected the cursor to be off before typing")
+	}
+
+	a = typeRunes(a, "x")
+
+	if !a.cursorBlink {
+		t.Error("cursorBlink = false right after typing, want true")
+	}
+}
+
+// A tick from before the last reset must not toggle a cycle it does not
+// belong to.
+func TestStaleBlinkTickIsIgnored(t *testing.T) {
+	a := testApp(t)
+	staleSeq := a.blinkSeq
+
+	a = typeRunes(a, "x") // resets the cycle, advancing blinkSeq
+
+	m, _ := a.Update(blinkCursor(staleSeq))
+	a = m.(App)
+
+	if !a.cursorBlink {
+		t.Error("a stale tick toggled the cursor off")
+	}
 }
 
 func typeRunes(a App, s string) App {

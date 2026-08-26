@@ -87,6 +87,9 @@ func (a App) renderLine(vl editor.VisualLine, isCursorRow bool) string {
 	styleFor := func(class int) func(...string) string {
 		switch class {
 		case atCursor:
+			if !a.cursorBlink {
+				return textStyle.Render
+			}
 			return cursorStyle.Render
 		case selected:
 			return selectStyle.Render

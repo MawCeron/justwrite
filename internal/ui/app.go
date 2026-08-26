@@ -41,6 +41,16 @@ type clearStatus int
 
 const statusLinger = 2 * time.Second
 
+// blinkCursor toggles the page's own cursor, identified by the sequence
+// number its cycle started with so an old cycle a keystroke has since reset
+// cannot keep ticking alongside the new one.
+type blinkCursor int
+
+// cursorBlinkSpeed is a var, not a const, so tests can shrink it to nothing
+// rather than pay for a real blink cycle every time a helper inspects a
+// batched command.
+var cursorBlinkSpeed = 530 * time.Millisecond
+
 type App struct {
 	ed   *editor.Editor
 	mode Mode
@@ -65,6 +75,9 @@ type App struct {
 	findInput   textinput.Model
 	onFindQuery bool // find: typing a query, rather than stepping through matches
 	findOrigin  int  // cursor position from before the search, restored on esc
+
+	cursorBlink bool // whether the page's own cursor is in its visible phase
+	blinkSeq    int
 
 	title string // last title handed to the terminal
 }
@@ -100,10 +113,16 @@ func NewApp(path string) (App, error) {
 	findInput.Cursor.Style = fieldCursorStyle
 
 	// A sane size until the terminal reports its own.
-	return App{ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: loadConfig(), w: 80, h: 24}, nil
+	return App{
+		ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: loadConfig(),
+		w: 80, h: 24,
+		cursorBlink: true, // visible from the first frame, not mid-blink
+	}, nil
 }
 
-func (a App) Init() tea.Cmd { return nil }
+func (a App) Init() tea.Cmd {
+	return tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return blinkCursor(0) })
+}
 
 // Update dispatches the message and then, if the document's identity changed,
 // tells the terminal about it — rather than repainting the title every frame.
@@ -128,10 +147,18 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 			a.status = ""
 		}
 
+	case blinkCursor:
+		if int(msg) == a.blinkSeq {
+			a.cursorBlink = !a.cursorBlink
+			return a, tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return msg })
+		}
+
 	case tea.KeyMsg:
+		if a.mode == ModeWrite {
+			next, cmd := a.keyWrite(msg)
+			return next, tea.Batch(cmd, next.resetBlink())
+		}
 		switch a.mode {
-		case ModeWrite:
-			return a.keyWrite(msg)
 		case ModeOpen:
 			return a.keyOpen(msg)
 		case ModeSaveAs:
@@ -151,10 +178,9 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 		}
 
 	default:
-		// Everything that is not a key press or one of the two above — the
-		// cursor's own blink tick, chiefly — still has to reach whichever
-		// text field is currently focused, or its cursor stops blinking and
-		// can end up stuck invisible.
+		// Anything else still has to reach whichever text field is
+		// currently focused — a paste event delivered outside a key
+		// message, say — or that field stops responding to it.
 		var cmd tea.Cmd
 		switch {
 		case a.mode == ModeSaveAs && a.onName:
@@ -395,6 +421,17 @@ func (a *App) posted(text string) tea.Cmd {
 	a.statusSeq++
 	seq := a.statusSeq
 	return tea.Tick(statusLinger, func(time.Time) tea.Msg { return clearStatus(seq) })
+}
+
+// resetBlink holds the cursor solid through anything that changed where it
+// is or what is around it, and starts a fresh blink cycle from there — so
+// the blink is never mid-cycle at the exact moment you look for the cursor
+// after typing or moving it.
+func (a *App) resetBlink() tea.Cmd {
+	a.cursorBlink = true
+	a.blinkSeq++
+	seq := a.blinkSeq
+	return tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return blinkCursor(seq) })
 }
 
 // ─── Dialogs ─────────────────────────────────────────────────────────────────
