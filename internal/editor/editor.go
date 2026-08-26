@@ -52,11 +52,14 @@ type Editor struct {
 	seq   int // next sequence number to hand out to a new edit
 	saved int // the seq on top of undo when the document was last loaded or saved
 
-	// A burst of typed characters collapses into a single undo step, so one
-	// ctrl+z takes back a word rather than a letter. The burst is committed by
+	// A burst of typed characters, or a burst of contiguous backspaces,
+	// collapses into a single undo step, so one ctrl+z takes back a word
+	// rather than a letter. pendingDelete tells the two kinds of burst apart
+	// — they never merge into one op even when adjacent. Committed by
 	// anything that breaks it: a space, a newline, a move, a save.
-	pendingAt   int
-	pendingText []rune
+	pendingAt     int
+	pendingText   []rune
+	pendingDelete bool
 }
 
 func New() *Editor {
@@ -83,6 +86,7 @@ func (e *Editor) SetText(s string) {
 	e.saved = 0
 	e.pendingAt = noSel
 	e.pendingText = nil
+	e.pendingDelete = false
 }
 
 // NewDocument resets to a blank, unnamed document.
@@ -213,18 +217,19 @@ func (e *Editor) currentSeq() int {
 	return e.undo[len(e.undo)-1].seq
 }
 
-// CommitPending flushes the current typing burst into the undo stack. It must
-// be called before anything that breaks the burst, or the burst would keep
-// growing across unrelated edits.
+// CommitPending flushes the current burst — typed or backspaced — into the
+// undo stack. It must be called before anything that breaks the burst, or
+// the burst would keep growing across unrelated edits.
 func (e *Editor) CommitPending() {
 	if e.pendingAt == noSel {
 		return
 	}
 	if len(e.pendingText) > 0 {
-		e.push(editOp{insert: true, at: e.pendingAt, text: string(e.pendingText)})
+		e.push(editOp{insert: !e.pendingDelete, at: e.pendingAt, text: string(e.pendingText)})
 	}
 	e.pendingAt = noSel
 	e.pendingText = nil
+	e.pendingDelete = false
 }
 
 func (e *Editor) Undo() {
@@ -291,12 +296,12 @@ func (e *Editor) InsertRune(r rune) {
 	e.Modified = true
 	e.redo = nil
 
-	if e.pendingAt != noSel && e.pendingAt+len(e.pendingText) == at {
+	if !e.pendingDelete && e.pendingAt != noSel && e.pendingAt+len(e.pendingText) == at {
 		e.pendingText = append(e.pendingText, r)
 		return
 	}
 	e.CommitPending()
-	e.pendingAt, e.pendingText = at, []rune{r}
+	e.pendingAt, e.pendingText, e.pendingDelete = at, []rune{r}, false
 }
 
 // InsertString inserts text as a single undo step — a tab, or a paste.
@@ -318,8 +323,10 @@ func (e *Editor) insertAsOneOp(s string) {
 	e.push(editOp{insert: true, at: at, text: s})
 }
 
+// Backspace collapses a run of contiguous backspaces into one undo step, the
+// same as typing does — deleting five characters after typing "hola mundo"
+// used to take seven undos to reach an empty document instead of two.
 func (e *Editor) Backspace() {
-	e.CommitPending()
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()
 		return
@@ -331,7 +338,15 @@ func (e *Editor) Backspace() {
 	e.buf = slices.Delete(e.buf, e.cursor-1, e.cursor)
 	e.cursor--
 	e.Modified = true
-	e.push(editOp{at: e.cursor, text: string(r)})
+	e.redo = nil
+
+	if e.pendingDelete && e.pendingAt == e.cursor+1 {
+		e.pendingText = append([]rune{r}, e.pendingText...)
+		e.pendingAt = e.cursor
+		return
+	}
+	e.CommitPending()
+	e.pendingAt, e.pendingText, e.pendingDelete = e.cursor, []rune{r}, true
 }
 
 func (e *Editor) DeleteForward() {

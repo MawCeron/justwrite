@@ -36,6 +36,50 @@ func TestSpaceEndsTheBurst(t *testing.T) {
 	}
 }
 
+func backspaceN(e *Editor, n int) {
+	for range n {
+		e.Backspace()
+	}
+}
+
+// A run of backspaces collapses into one undo step too, matching typing —
+// deleting five characters used to take five separate undos to get the text
+// back, not one.
+func TestBackspaceTakesBackAWholeBurst(t *testing.T) {
+	e := New()
+	typeText(e, "hola mundo")
+
+	backspaceN(e, 5) // removes "mundo"
+	if got := e.Text(); got != "hola " {
+		t.Fatalf("after 5 backspaces: %q, want %q", got, "hola ")
+	}
+
+	e.Undo()
+	if got := e.Text(); got != "hola mundo" {
+		t.Errorf("one undo after the backspaces: %q, want the whole burst back", got)
+	}
+}
+
+// A backspace burst and a typing burst never merge into one undo step, even
+// sitting right next to each other, or undo could reinsert text in the wrong
+// place relative to what was typed after it.
+func TestBackspaceThenTypingAreSeparateBursts(t *testing.T) {
+	e := New()
+	typeText(e, "abc")
+	e.Backspace()    // "ab"
+	typeText(e, "x") // "abx"
+
+	e.Undo()
+	if got := e.Text(); got != "ab" {
+		t.Errorf("after undoing the typed x: %q, want %q", got, "ab")
+	}
+
+	e.Undo()
+	if got := e.Text(); got != "abc" {
+		t.Errorf("after undoing the backspace: %q, want %q", got, "abc")
+	}
+}
+
 // A newline is its own step, so undo never merges two paragraphs back together.
 func TestNewlineIsItsOwnUndoStep(t *testing.T) {
 	e := New()
