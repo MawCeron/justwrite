@@ -14,6 +14,10 @@ Set Theme { "name": "justwrite", "background": "#0D0D0B", "foreground": "#E6E2D6
 
 Hide
 Type "export PATH=$PWD/assets/tapes/bin:$PATH" Enter
+# Otherwise justwrite reads whatever session/document goal the recording
+# machine actually has set, and the panel comes out showing somebody's
+# real numbers instead of a fresh install's.
+Type "export XDG_CONFIG_HOME=$(mktemp -d)" Enter
 Type "cd $(mktemp -d) && clear" Enter
 
 Type "justwrite" Enter
