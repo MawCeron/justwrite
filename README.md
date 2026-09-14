@@ -164,6 +164,8 @@ Three, cycled with `←`/`→` from the help panel (`F1`):
 
 ![The writing page under the paper theme: dark ink on a light background](assets/paper.svg)
 
+![The writing page under the mono theme: grayscale text with a bright-white cursor](assets/mono.svg)
+
 `NO_COLOR` wins over all three regardless.
 
 ## The status bar
