@@ -30,11 +30,11 @@ func (a App) View() string {
 
 	rows := make([]string, 0, a.h)
 	for range topMargin {
-		rows = append(rows, "")
+		rows = append(rows, blankRow(a.w))
 	}
 	rows = append(rows, a.page()...)
 	for range bottomGap {
-		rows = append(rows, "")
+		rows = append(rows, blankRow(a.w))
 	}
 	rows = append(rows, a.statusBar())
 
@@ -51,17 +51,39 @@ func (a App) page() []string {
 	a.ed.AdjustScroll(vlines, height)
 
 	cursorRow := a.ed.CursorVisualLine(vlines)
-	pad := strings.Repeat(" ", max((a.w-width)/2, 0))
+	leftPad := max((a.w-width)/2, 0)
 
 	rows := make([]string, 0, height)
 	for i := a.ed.Scroll; i < a.ed.Scroll+height; i++ {
 		if i < 0 || i >= len(vlines) {
-			rows = append(rows, "")
+			rows = append(rows, blankRow(a.w))
 			continue
 		}
-		rows = append(rows, pad+a.renderLine(vlines[i], i == cursorRow))
+		rows = append(rows, padLine(a.renderLine(vlines[i], i == cursorRow), leftPad, a.w))
 	}
 	return rows
+}
+
+// blankRow is one full-width row of nothing: the page background where a
+// theme paints one, or an untouched terminal cell where it does not — which
+// is how every theme behaved before any of them had a page background to
+// paint.
+func blankRow(width int) string {
+	if !hasPageBg {
+		return ""
+	}
+	return pageFillStyle.Render(strings.Repeat(" ", width))
+}
+
+// padLine centres line within width, painting the margins and whatever lies
+// beyond a short line with the page background where a theme sets one.
+func padLine(line string, leftPad, width int) string {
+	if !hasPageBg {
+		return strings.Repeat(" ", leftPad) + line
+	}
+	left := pageFillStyle.Render(strings.Repeat(" ", leftPad))
+	right := pageFillStyle.Render(strings.Repeat(" ", max(width-leftPad-ansi.StringWidth(line), 0)))
+	return left + line + right
 }
 
 // renderLine draws one row, painting the selection and the block cursor into
