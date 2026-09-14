@@ -10,8 +10,13 @@ Set Padding 20
 Set CursorBlink false
 Set TypingSpeed 60ms
 
-# See _theme.md. Only the page background and default ink come from here.
-Set Theme { "name": "justwrite", "background": "#0D0D0B", "foreground": "#E6E2D6", "selection": "#4A3A12", "cursor": "#F4D33E", "black": "#1A1815", "red": "#C25B5B", "green": "#7FA86B", "yellow": "#DD9803", "blue": "#6B8CA8", "magenta": "#A87FA8", "cyan": "#6BA8A0", "white": "#D7D3C6", "brightBlack": "#3A3222", "brightRed": "#FFB4B4", "brightGreen": "#A8E6A8", "brightYellow": "#F4D33E", "brightBlue": "#9BB8CE", "brightMagenta": "#CEA8CE", "brightCyan": "#9BCEC8", "brightWhite": "#F2EFE4" }
+# See _theme.md — screen's pure ANSI colours resolve from these ANSI slots.
+Set Theme { "name": "justwrite", "background": "#0B0D0E", "foreground": "#C0C0C0", "selection": "#404040", "cursor": "#00A0A0", "black": "#000000", "red": "#C25B5B", "green": "#4A9078", "yellow": "#B08D57", "blue": "#0000C0", "magenta": "#8B7AA8", "cyan": "#00A0A0", "white": "#C0C0C0", "brightBlack": "#808080", "brightRed": "#FF0000", "brightGreen": "#00FF00", "brightYellow": "#D9B166", "brightBlue": "#6B8CFF", "brightMagenta": "#C79AE0", "brightCyan": "#00FFFF", "brightWhite": "#F0F0F0" }
+
+# Now that screen resolves real colour from these slots instead of just
+# completeness filler, give the browser a moment to actually apply the
+# theme before anything paints — skipping this risks a flaky chip colour.
+Sleep 300ms
 
 Hide
 # The spawned shell inherits nothing, so PATH is exported here — unquoted, or
