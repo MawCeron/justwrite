@@ -60,6 +60,14 @@ func TestPreview(t *testing.T) {
 
 	write("writing", scene())
 
+	// One shot of another theme, to show paper is a real light page rather
+	// than a recoloured dark one. Reset immediately after: every frame from
+	// here on is meant to be the default.
+	paper := scene()
+	applyTheme("paper")
+	write("paper", paper)
+	applyTheme("screen")
+
 	help := scene()
 	help.mode = ModeHelp
 	write("help", help)
