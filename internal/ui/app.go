@@ -90,6 +90,9 @@ func NewApp(path string) (App, error) {
 		}
 	}
 
+	cfg := loadConfig()
+	applyTheme(cfg.Theme)
+
 	name := textinput.New()
 	name.Prompt = ""
 	name.Placeholder = "filename.md"
@@ -114,7 +117,7 @@ func NewApp(path string) (App, error) {
 
 	// A sane size until the terminal reports its own.
 	return App{
-		ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: loadConfig(),
+		ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: cfg,
 		w: 80, h: 24,
 		cursorBlink: true, // visible from the first frame, not mid-blink
 	}, nil
@@ -723,8 +726,22 @@ func (a App) keyHelp(msg tea.KeyMsg) (App, tea.Cmd) {
 		a.helpScroll = max(a.helpScroll-visible, 0)
 	case "pgdown":
 		a.helpScroll = min(a.helpScroll+visible, helpMaxScroll(visible))
+	case "left":
+		return a.cycleTheme(-1)
+	case "right":
+		return a.cycleTheme(1)
 	}
 	return a, nil
+}
+
+// cycleTheme steps to the next or previous theme, applies it immediately,
+// and persists the choice — there is no separate confirm step, since a
+// cycle has nothing left to type.
+func (a App) cycleTheme(delta int) (App, tea.Cmd) {
+	a.cfg.Theme = cycleTheme(a.cfg.Theme, delta)
+	applyTheme(a.cfg.Theme)
+	a.cfg.save()
+	return a, a.posted("theme: " + a.cfg.Theme)
 }
 
 func (a App) keyClosePanel(msg tea.KeyMsg) (App, tea.Cmd) {

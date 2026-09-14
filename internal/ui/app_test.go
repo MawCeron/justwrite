@@ -193,6 +193,36 @@ func TestHelpAndAbout(t *testing.T) {
 	}
 }
 
+// Left and right in the help panel cycle the theme, wrapping in both
+// directions, and persist the choice.
+func TestThemeCyclesFromTheHelpPanel(t *testing.T) {
+	a := testApp(t)
+	if a.cfg.Theme != "" {
+		t.Fatalf("cfg.Theme = %q, want unset on a fresh App", a.cfg.Theme)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyF1})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRight})
+	if a.cfg.Theme != "paper" {
+		t.Fatalf("cfg.Theme = %q after one right, want paper", a.cfg.Theme)
+	}
+	if c := loadConfig(); c.Theme != "paper" {
+		t.Errorf("loadConfig().Theme = %q, want the cycle to have persisted", c.Theme)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyLeft})
+	if a.cfg.Theme != "screen" {
+		t.Fatalf("cfg.Theme = %q after right then left, want screen", a.cfg.Theme)
+	}
+
+	// Wraps at both ends.
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyLeft})
+	if a.cfg.Theme != "mono" {
+		t.Errorf("cfg.Theme = %q after wrapping left from screen, want mono", a.cfg.Theme)
+	}
+}
+
 // The session and document word goals are the settings justwrite has, and
 // they are changed from inside the stats panel rather than by hand-editing a
 // file.

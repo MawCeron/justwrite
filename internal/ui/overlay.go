@@ -211,7 +211,7 @@ func (a App) helpPanel() string {
 
 	body = append(body, "")
 
-	footer := "? about"
+	footer := "←→ theme  ? about"
 	if scroll > 0 || end < bands {
 		footer = "↑↓ more  " + footer
 	}
