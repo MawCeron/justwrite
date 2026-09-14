@@ -110,7 +110,8 @@ Naming a file that does not exist yet is how you start one: the name sticks, and
 
 Undo works in bursts: one `Ctrl+Z` takes back a word, not a letter.
 
-`F1` puts the whole list on screen, and `?` from there opens About:
+`F1` puts the whole list on screen, and `?` from there opens About. `←`/`→`
+there cycle the theme, applying and saving it immediately:
 
 ![The help panel floating over the page, two columns of shortcuts](assets/help.svg)
 
@@ -149,6 +150,21 @@ offers a way out: reload the disk version, overwrite it anyway, or save as a
 different file.
 
 ![A panel warning that the file changed on disk since it was opened, offering reload, overwrite, or save as](assets/conflict.svg)
+
+## Themes
+
+Three, cycled with `←`/`→` from the help panel (`F1`):
+
+- **screen** — the default. Pure ANSI (0-15), so it adopts whatever colour
+  scheme the terminal already has rather than imposing one.
+- **paper** — dark ink on an actual light page, not just recoloured text.
+  What makes justwrite usable on an e-ink writerdeck or in direct sunlight.
+- **mono** — grayscale ANSI for a terminal with no truecolor, so nothing gets
+  left to termenv's guesswork.
+
+![The writing page under the paper theme: dark ink on a light background](assets/paper.svg)
+
+`NO_COLOR` wins over all three regardless.
 
 ## The status bar
 

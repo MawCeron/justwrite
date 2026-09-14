@@ -19,6 +19,9 @@ and this project uses [Semantic Versioning](https://semver.org/).
   shown as `current / goal`.
 - `--version` and `--help` command-line flags.
 - The editor's cursor, and every text-field cursor, now blinks.
+- Three themes — screen (pure ANSI, the default), paper (a real light page),
+  and mono (grayscale ANSI) — cycled with `←`/`→` from the help panel and
+  saved to the config file.
 
 ### Changed
 
