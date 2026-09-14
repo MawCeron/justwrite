@@ -12,8 +12,9 @@ import (
 // config is the handful of settings the user can change from inside the app
 // — never a file they are expected to open and edit themselves.
 type config struct {
-	SessionGoal int // words for this sitting; 0 means none set
-	DocGoal     int // total words the document is aiming for; 0 means none set
+	SessionGoal int    // words for this sitting; 0 means none set
+	DocGoal     int    // total words the document is aiming for; 0 means none set
+	Theme       string // "screen", "paper", or "mono"; empty means screen
 }
 
 // userConfigDir is os.UserConfigDir, indirected so tests can point it at a
@@ -54,15 +55,19 @@ func loadConfig() config {
 		if !ok {
 			continue
 		}
-		n, err := strconv.Atoi(strings.TrimSpace(value))
-		if err != nil {
-			continue
-		}
+		value = strings.TrimSpace(value)
+
 		switch strings.TrimSpace(key) {
 		case "session_goal":
-			c.SessionGoal = n
+			if n, err := strconv.Atoi(value); err == nil {
+				c.SessionGoal = n
+			}
 		case "doc_goal":
-			c.DocGoal = n
+			if n, err := strconv.Atoi(value); err == nil {
+				c.DocGoal = n
+			}
+		case "theme":
+			c.Theme = value
 		}
 	}
 	return c
@@ -87,6 +92,9 @@ func (c config) save() error {
 	}
 	if c.DocGoal > 0 {
 		fmt.Fprintf(&b, "doc_goal = %d\n", c.DocGoal)
+	}
+	if c.Theme != "" {
+		fmt.Fprintf(&b, "theme = %s\n", c.Theme)
 	}
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
