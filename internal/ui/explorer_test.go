@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A directory with one of everything the listing has to deal with.
@@ -122,6 +124,58 @@ func TestMoveStaysInsideTheList(t *testing.T) {
 	e.move(100, 10)
 	if want := len(e.shown) - 1; e.cursor != want {
 		t.Errorf("cursor = %d after moving down past the end, want %d", e.cursor, want)
+	}
+}
+
+// A file no longer on disk drops off the list instead of showing up as
+// something that cannot actually be opened.
+func TestRecentEntriesSkipsWhatNoLongerExists(t *testing.T) {
+	dir := t.TempDir()
+	gone := filepath.Join(dir, "gone.md")
+	here := filepath.Join(dir, "here.md")
+	if err := os.WriteFile(here, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// gone.md is recorded but never written to disk — as if it were deleted
+	// after justwrite last had it open.
+
+	now := time.Now()
+	st := state{Documents: map[string]docState{
+		gone: {Cursor: 0, Opened: now},
+		here: {Cursor: 0, Opened: now.Add(-time.Minute)},
+	}}
+
+	entries := recentEntries(st)
+	if len(entries) != 1 || entries[0].path != here {
+		t.Fatalf("recentEntries = %+v, want just here.md", entries)
+	}
+}
+
+// Newest first, and never more than maxRecentFiles.
+func TestRecentEntriesOrderedAndCapped(t *testing.T) {
+	dir := t.TempDir()
+	st := state{Documents: map[string]docState{}}
+	now := time.Now()
+	for i := range maxRecentFiles + 5 {
+		p := filepath.Join(dir, fmt.Sprintf("doc%02d.md", i))
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// Higher i opened more recently.
+		st.Documents[p] = docState{Cursor: i, Opened: now.Add(time.Duration(i) * time.Minute)}
+	}
+
+	entries := recentEntries(st)
+	if len(entries) != maxRecentFiles {
+		t.Fatalf("len(entries) = %d, want %d", len(entries), maxRecentFiles)
+	}
+	newest := filepath.Join(dir, fmt.Sprintf("doc%02d.md", maxRecentFiles+4))
+	if entries[0].path != newest {
+		t.Errorf("entries[0] = %q, want the most recently opened %q", entries[0].path, newest)
+	}
+	oldestKept := filepath.Join(dir, fmt.Sprintf("doc%02d.md", 5)) // the 5 oldest were dropped
+	if entries[len(entries)-1].path != oldestKept {
+		t.Errorf("entries[last] = %q, want %q", entries[len(entries)-1].path, oldestKept)
 	}
 }
 

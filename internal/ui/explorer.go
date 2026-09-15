@@ -6,17 +6,23 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/MawCeron/justwrite/internal/editor"
 	"github.com/charmbracelet/x/ansi"
 )
 
+// maxRecentFiles is how many entries the open dialog's recent-files list
+// shows — "ten paths" per the issue this is built from.
+const maxRecentFiles = 10
+
 type entry struct {
-	name  string // shown as-is, with a trailing / for directories
-	path  string
-	isDir bool
-	isUp  bool
-	noise bool // hidden or binary: out of the way unless asked for
+	name   string // shown as-is, with a trailing / for directories
+	path   string
+	isDir  bool
+	isUp   bool
+	noise  bool // hidden or binary: out of the way unless asked for
+	recent bool // a path from elsewhere, not a name in the current directory
 }
 
 // explorer is the directory listing behind the open and save dialogs.
@@ -28,7 +34,8 @@ type explorer struct {
 	offset  int
 	filter  string
 	showAll bool
-	total   int // entries before the filter, for the counter
+	recent  bool // showing recentEntries instead of e.dir's contents
+	total   int  // entries before the filter, for the counter
 }
 
 // refresh reads dir. focus is the name to put the cursor on, which is how
@@ -42,6 +49,7 @@ func (e *explorer) refresh(dir, focus string) {
 	e.dir = dir
 	e.all = nil
 	e.filter = ""
+	e.recent = false
 
 	if parent := filepath.Dir(dir); parent != dir {
 		e.all = append(e.all, entry{name: "../", path: parent, isDir: true, isUp: true})
@@ -73,6 +81,45 @@ func (e *explorer) refresh(dir, focus string) {
 	e.all = append(e.all, files...)
 	e.apply()
 	e.focusOn(focus)
+}
+
+// refreshRecent swaps the listing for entries, most recently opened first.
+// Unlike a directory there is no parent to step up to and no name to sort
+// by — the order already means something.
+func (e *explorer) refreshRecent(entries []entry) {
+	e.recent = true
+	e.all = entries
+	e.filter = ""
+	e.apply()
+	e.cursor, e.offset = 0, 0
+}
+
+// recentEntries is the maxRecentFiles most recently opened documents that
+// still exist, newest first. Existence is checked here, on read, rather
+// than when state is written, so a moved or deleted file quietly drops off
+// the list instead of needing a cleanup pass of its own.
+func recentEntries(st state) []entry {
+	type ranked struct {
+		path   string
+		opened time.Time
+	}
+	all := make([]ranked, 0, len(st.Documents))
+	for path, d := range st.Documents {
+		all = append(all, ranked{path, d.Opened})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].opened.After(all[j].opened) })
+
+	entries := make([]entry, 0, maxRecentFiles)
+	for _, r := range all {
+		if len(entries) == maxRecentFiles {
+			break
+		}
+		if _, err := os.Stat(r.path); err != nil {
+			continue // moved or deleted since it was last open
+		}
+		entries = append(entries, entry{name: r.path, path: r.path, recent: true})
+	}
+	return entries
 }
 
 // apply rebuilds the visible list from the filter and the noise setting.
@@ -148,6 +195,14 @@ func (e *explorer) rows(n, width int, focused bool) []string {
 		}
 		it := e.shown[i]
 
+		name := it.name
+		if it.recent {
+			// A path, not a name — truncate from the left like the dialog's
+			// own title does, so the filename at the end stays legible
+			// instead of the directory prefix that says less.
+			name = dirLabel(name, width-2)
+		}
+
 		style, pad := overlayStyle, overlayStyle.Render
 		if it.isDir {
 			style = overlayDirStyle
@@ -158,7 +213,7 @@ func (e *explorer) rows(n, width int, focused bool) []string {
 				style = overlaySelDirStyle
 			}
 		}
-		out = append(out, fitCell(style.Render("  "+it.name), width, pad))
+		out = append(out, fitCell(style.Render("  "+name), width, pad))
 	}
 	return out
 }
@@ -185,7 +240,15 @@ func (a App) filePanel() string {
 	}
 
 	label := title + " · " + dirLabel(a.exp.dir, width-ansi.StringWidth(title)-9)
-	return panelBox(label, a.exp.footer(), body, width)
+	if a.exp.recent {
+		label = title + " · recent"
+	}
+
+	footer := a.exp.footer()
+	if footer == "" && a.mode == ModeOpen {
+		footer = "ctrl+r recent"
+	}
+	return panelBox(label, footer, body, width)
 }
 
 // dirLabel shortens the current path from the left. The tail is the part that
@@ -201,6 +264,9 @@ func dirLabel(dir string, room int) string {
 func (e *explorer) footer() string {
 	if e.filter != "" {
 		return fmt.Sprintf("/%s  %d/%d", e.filter, len(e.shown), e.total)
+	}
+	if e.recent {
+		return "ctrl+r back"
 	}
 	if e.showAll {
 		return "all files"
