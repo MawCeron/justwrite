@@ -72,6 +72,8 @@ type App struct {
 	goalInput   textinput.Model
 	editingGoal goalField // stats: which goal field has the focus, if any
 
+	st state // where the cursor was left in every document justwrite has seen
+
 	findInput   textinput.Model
 	onFindQuery bool // find: typing a query, rather than stepping through matches
 	findOrigin  int  // cursor position from before the search, restored on esc
@@ -84,9 +86,13 @@ type App struct {
 
 func NewApp(path string) (App, error) {
 	ed := editor.New()
+	st := loadState()
 	if path != "" {
 		if err := ed.Load(path); err != nil {
 			return App{}, err
+		}
+		if cur, ok := st.cursorFor(path); ok {
+			ed.SetCursor(cur)
 		}
 	}
 
@@ -117,7 +123,7 @@ func NewApp(path string) (App, error) {
 
 	// A sane size until the terminal reports its own.
 	return App{
-		ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: cfg,
+		ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: cfg, st: st,
 		w: 80, h: 24,
 		cursorBlink: true, // visible from the first frame, not mid-blink
 	}, nil
@@ -218,9 +224,13 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 	switch msg.String() {
 	// ── File ──
 	case "ctrl+q":
-		return a.confirmed("quit without saving?", func(a *App) tea.Cmd { return tea.Quit })
+		return a.confirmed("quit without saving?", func(a *App) tea.Cmd { a.recordState(); return tea.Quit })
 	case "ctrl+n":
-		return a.confirmed("discard changes?", func(a *App) tea.Cmd { a.ed.NewDocument(); return nil })
+		return a.confirmed("discard changes?", func(a *App) tea.Cmd {
+			a.recordState()
+			a.ed.NewDocument()
+			return nil
+		})
 	case "ctrl+o":
 		// Opening replaces the buffer, which is one more way to lose a draft.
 		return a.confirmed("discard changes?", (*App).openDialog)
@@ -400,7 +410,19 @@ func (a *App) saveNow() tea.Cmd {
 		}
 		return a.failed(err)
 	}
+	a.recordState()
 	return a.posted("saved")
+}
+
+// recordState remembers where the cursor is in the current document, so
+// reopening it later picks up here instead of at the end. An unnamed
+// document has no path to key that by, so there is nothing to record.
+func (a *App) recordState() {
+	if a.ed.Path == "" {
+		return
+	}
+	a.st.record(a.ed.Path, a.ed.Cursor())
+	a.st.save()
 }
 
 func (a *App) saveTo(path string) tea.Cmd {
@@ -408,6 +430,7 @@ func (a *App) saveTo(path string) tea.Cmd {
 		return a.failed(err)
 	}
 	a.mode = ModeWrite
+	a.recordState()
 	return a.posted("saved")
 }
 
@@ -581,8 +604,12 @@ func (a App) enterSelection(naming bool) (App, tea.Cmd) {
 		return a, a.name.Focus()
 	}
 
+	a.recordState() // remember where this one was left before replacing it
 	if err := a.ed.Load(it.path); err != nil {
 		return a, a.failed(err)
+	}
+	if cur, ok := a.st.cursorFor(it.path); ok {
+		a.ed.SetCursor(cur)
 	}
 	a.mode = ModeWrite
 	return a, nil
@@ -649,6 +676,7 @@ func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
 		if err := a.ed.ForceSave(); err != nil {
 			return a, a.failed(err)
 		}
+		a.recordState()
 		return a, a.posted("saved")
 	case "s":
 		a.mode = ModeWrite

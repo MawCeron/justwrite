@@ -748,3 +748,129 @@ func TestEscRestoresTheCursorAfterFind(t *testing.T) {
 		t.Error("esc left a selection behind")
 	}
 }
+
+// A document nobody has opened before still lands at the end, same as
+// always — state only changes anything once there is something recorded.
+func TestOpeningAnUnseenDocumentPutsTheCursorAtTheEnd(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	path := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(path, []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if got, want := a.ed.Cursor(), len([]rune("hola")); got != want {
+		t.Errorf("Cursor() = %d, want %d (end of buffer)", got, want)
+	}
+}
+
+// Reopening a document — by relaunching justwrite with its path, the way
+// NewApp is always reached — picks up the cursor where a prior save left
+// it, rather than jumping to the end.
+func TestReopeningADocumentRestoresTheCursor(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	path := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(path, []byte("hola mundo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a.ed.SetCursor(4)
+	a.recordState()
+
+	reopened, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp (reopen): %v", err)
+	}
+	if got := reopened.ed.Cursor(); got != 4 {
+		t.Errorf("Cursor() = %d, want 4 (restored)", got)
+	}
+}
+
+// The file may have shrunk since state was recorded for it — SetCursor's own
+// clamp has to be trusted, not indexed into blindly.
+func TestReopeningAShorterFileClampsTheCursor(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	path := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(path, []byte("this is a long line of text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a.ed.SetCursor(20)
+	a.recordState()
+
+	if err := os.WriteFile(path, []byte("short"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp (reopen): %v", err)
+	}
+	if got, max := reopened.ed.Cursor(), len(reopened.ed.Runes()); got > max {
+		t.Errorf("Cursor() = %d, past the end of a %d-rune buffer", got, max)
+	}
+}
+
+// Switching documents through the open dialog remembers where the one being
+// left was, and restores the one being opened if justwrite has seen it
+// before — the same behaviour NewApp gives the path on the command line.
+func TestSwitchingDocumentsRestoresAndRecordsCursor(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.md")
+	second := filepath.Join(dir, "second.md")
+	if err := os.WriteFile(first, []byte("hola mundo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte("adios"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp(first)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a.ed.SetCursor(4)
+
+	a.mode = ModeOpen
+	a.exp.refresh(dir, "second.md")
+	a, _ = a.enterSelection(false)
+
+	if got := a.ed.Path; got != second {
+		t.Fatalf("Path = %q, want %q", got, second)
+	}
+	if got := a.st.Documents; len(got) != 1 {
+		t.Fatalf("recorded %d documents, want 1 (first.md, left behind)", len(got))
+	}
+	if cur, ok := a.st.cursorFor(first); !ok || cur != 4 {
+		t.Errorf("cursorFor(first) = %d, %v, want 4, true", cur, ok)
+	}
+
+	// Switch back: second.md was never recorded (still open), first.md was.
+	a.mode = ModeOpen
+	a.exp.refresh(dir, "first.md")
+	a, _ = a.enterSelection(false)
+
+	if got := a.ed.Cursor(); got != 4 {
+		t.Errorf("Cursor() = %d, want 4 (restored on returning to first.md)", got)
+	}
+}
