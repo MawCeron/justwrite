@@ -58,24 +58,33 @@ func TestStateKeysByAbsolutePath(t *testing.T) {
 func TestStateEvictsTheOldestPastTheCap(t *testing.T) {
 	withTempConfigDir(t)
 
+	dir := t.TempDir()
+	path := func(name string) string { return filepath.Join(dir, name) }
+
 	s := state{Documents: map[string]docState{}}
-	now := time.Now()
+	// Safely in the past, so record()'s own time.Now() below is unambiguously
+	// later than every one of these on any clock, however coarse.
+	base := time.Now().Add(-24 * time.Hour)
 	for i := range maxStateEntries {
-		s.Documents[fmt.Sprintf("/tmp/doc/%02d.md", i)] = docState{
+		abs, err := filepath.Abs(path(fmt.Sprintf("doc%02d.md", i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.Documents[abs] = docState{
 			Cursor: i,
-			Opened: now.Add(time.Duration(i) * time.Minute), // doc/00 is the oldest
+			Opened: base.Add(time.Duration(i) * time.Minute), // doc00 is the oldest
 		}
 	}
 
-	s.record("/tmp/new.md", 999) // one more pushes past the cap
+	s.record(path("new.md"), 999) // one more pushes past the cap
 
 	if len(s.Documents) != maxStateEntries {
 		t.Fatalf("len(Documents) = %d, want %d", len(s.Documents), maxStateEntries)
 	}
-	if _, ok := s.cursorFor("/tmp/doc/00.md"); ok {
+	if _, ok := s.cursorFor(path("doc00.md")); ok {
 		t.Error("the oldest entry survived eviction")
 	}
-	if cur, ok := s.cursorFor("/tmp/new.md"); !ok || cur != 999 {
+	if cur, ok := s.cursorFor(path("new.md")); !ok || cur != 999 {
 		t.Error("the newly recorded entry was evicted instead of the oldest")
 	}
 }
