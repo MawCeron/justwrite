@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-15
+
 ### Added
 
 - Find (`Ctrl+F`): case-insensitive, wraps around. `Enter`/`n` for the next
@@ -98,7 +100,8 @@ First release.
 - Packages for Linux, macOS and Windows, x86-64 and ARM: `.deb`, `.rpm`,
   `.tar.gz`, `.zip`.
 
-[Unreleased]: https://github.com/MawCeron/justwrite/compare/v0.1.3...develop
+[Unreleased]: https://github.com/MawCeron/justwrite/compare/v0.2.0...develop
+[0.2.0]: https://github.com/MawCeron/justwrite/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/MawCeron/justwrite/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/MawCeron/justwrite/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/MawCeron/justwrite/compare/v0.1.0...v0.1.1
