@@ -29,10 +29,34 @@ const (
 	ModeFind
 )
 
-// confirmation is a question whose yes answer throws something away.
+// confirmation is a question whose yes answer throws something away. no is
+// optional — most confirmations just cancel back to ModeWrite on a decline,
+// but recovering a swap has its own cleanup to do when the answer is no.
 type confirmation struct {
 	message string
 	yes     func(*App) tea.Cmd
+	no      func(*App) tea.Cmd
+}
+
+// recoveryConfirm builds the "recover autosaved changes?" prompt for a
+// document whose swap turned out to be newer than what was just loaded —
+// the same y/n panel any other confirmation uses, not a mode of its own.
+func recoveryConfirm(ed *editor.Editor) (confirmation, bool) {
+	content, ok := ed.PendingSwap()
+	if !ok {
+		return confirmation{}, false
+	}
+	return confirmation{
+		message: "recover autosaved changes?",
+		yes: func(a *App) tea.Cmd {
+			a.ed.RecoverSwap(content)
+			return nil
+		},
+		no: func(a *App) tea.Cmd {
+			a.ed.RemoveSwap() // declined — nothing left worth keeping it for
+			return nil
+		},
+	}, true
 }
 
 // clearStatus retires a transient message, identified by the sequence number it
@@ -50,6 +74,16 @@ type blinkCursor int
 // rather than pay for a real blink cycle every time a helper inspects a
 // batched command.
 var cursorBlinkSpeed = 530 * time.Millisecond
+
+// autosaveTick asks the current document to write its swap file, if it has
+// unsaved changes. Unlike blinkCursor and clearStatus it carries no sequence
+// number: there is nothing to restart on a keystroke, so a plain recurring
+// tick for the App's whole lifetime is all this needs.
+type autosaveTick struct{}
+
+// autosaveInterval is a var for the same reason cursorBlinkSpeed is: so
+// tests never actually wait one out.
+var autosaveInterval = 3 * time.Second
 
 type App struct {
 	ed   *editor.Editor
@@ -87,12 +121,18 @@ type App struct {
 func NewApp(path string) (App, error) {
 	ed := editor.New()
 	st := loadState()
+	mode := ModeWrite
+	var conf confirmation
 	if path != "" {
 		if err := ed.Load(path); err != nil {
 			return App{}, err
 		}
 		if cur, ok := st.cursorFor(path); ok {
 			ed.SetCursor(cur)
+		}
+		if c, ok := recoveryConfirm(ed); ok {
+			conf = c
+			mode = ModeConfirm
 		}
 	}
 
@@ -125,12 +165,16 @@ func NewApp(path string) (App, error) {
 	return App{
 		ed: ed, name: name, goalInput: goalInput, findInput: findInput, cfg: cfg, st: st,
 		w: 80, h: 24,
+		mode: mode, confirm: conf,
 		cursorBlink: true, // visible from the first frame, not mid-blink
 	}, nil
 }
 
 func (a App) Init() tea.Cmd {
-	return tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return blinkCursor(0) })
+	return tea.Batch(
+		tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return blinkCursor(0) }),
+		tea.Tick(autosaveInterval, func(time.Time) tea.Msg { return autosaveTick{} }),
+	)
 }
 
 // Update dispatches the message and then, if the document's identity changed,
@@ -161,6 +205,12 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 			a.cursorBlink = !a.cursorBlink
 			return a, tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return msg })
 		}
+
+	case autosaveTick:
+		if a.ed.Path != "" && a.ed.Modified {
+			a.ed.WriteSwap()
+		}
+		return a, tea.Tick(autosaveInterval, func(time.Time) tea.Msg { return msg })
 
 	case tea.KeyMsg:
 		if a.mode == ModeWrite {
@@ -224,7 +274,11 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 	switch msg.String() {
 	// ── File ──
 	case "ctrl+q":
-		return a.confirmed("quit without saving?", func(a *App) tea.Cmd { a.recordState(); return tea.Quit })
+		return a.confirmed("quit without saving?", func(a *App) tea.Cmd {
+			a.recordState()
+			a.ed.RemoveSwap() // a controlled exit, clean or not, needs no recovery next time
+			return tea.Quit
+		})
 	case "ctrl+n":
 		return a.confirmed("discard changes?", func(a *App) tea.Cmd {
 			a.recordState()
@@ -411,6 +465,7 @@ func (a *App) saveNow() tea.Cmd {
 		return a.failed(err)
 	}
 	a.recordState()
+	a.ed.RemoveSwap() // a clean save needs no recovery next time
 	return a.posted("saved")
 }
 
@@ -431,6 +486,7 @@ func (a *App) saveTo(path string) tea.Cmd {
 	}
 	a.mode = ModeWrite
 	a.recordState()
+	a.ed.RemoveSwap()
 	return a.posted("saved")
 }
 
@@ -621,6 +677,11 @@ func (a App) enterSelection(naming bool) (App, tea.Cmd) {
 	if cur, ok := a.st.cursorFor(it.path); ok {
 		a.ed.SetCursor(cur)
 	}
+	if conf, ok := recoveryConfirm(a.ed); ok {
+		a.confirm = conf
+		a.mode = ModeConfirm
+		return a, nil
+	}
 	a.mode = ModeWrite
 	return a, nil
 }
@@ -665,8 +726,13 @@ func (a App) keyConfirm(msg tea.KeyMsg) (App, tea.Cmd) {
 		}
 		return a, action(&a)
 	case "n", "N", "esc":
+		action := a.confirm.no
 		a.confirm = confirmation{}
 		a.mode = ModeWrite
+		if action == nil {
+			return a, nil
+		}
+		return a, action(&a)
 	}
 	return a, nil
 }
@@ -687,6 +753,7 @@ func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
 			return a, a.failed(err)
 		}
 		a.recordState()
+		a.ed.RemoveSwap()
 		return a, a.posted("saved")
 	case "s":
 		a.mode = ModeWrite

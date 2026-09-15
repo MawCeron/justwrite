@@ -13,9 +13,11 @@ import (
 
 func init() {
 	// isQuit below executes a command's returned tea.Cmd synchronously to
-	// look inside it; a real blink-tick cmd riding along would otherwise
-	// make every such test wait out a real blink cycle for nothing.
+	// look inside it; a real blink-tick or autosave-tick cmd riding along
+	// would otherwise make every such test wait out a real cycle for
+	// nothing.
 	cursorBlinkSpeed = time.Nanosecond
+	autosaveInterval = time.Nanosecond
 }
 
 func testApp(t *testing.T) App {
@@ -951,5 +953,204 @@ func TestEscBacksOutOfRecentBeforeClosingTheDialog(t *testing.T) {
 	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
 	if a.mode != ModeWrite {
 		t.Errorf("mode = %v after a second esc, want ModeWrite", a.mode)
+	}
+}
+
+// Autosave writes the swap file once the document has unsaved changes, and
+// leaves nothing behind for one that does not.
+func TestAutosaveTickWritesSwapWhenModified(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	path := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(path, []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	swap := filepath.Join(filepath.Dir(path), ".draft.md.swp")
+
+	m, _ := a.Update(autosaveTick{})
+	a = m.(App)
+	if _, err := os.Stat(swap); !os.IsNotExist(err) {
+		t.Error("an unmodified document should not have written a swap")
+	}
+
+	a = typeRunes(a, " mundo")
+	m, _ = a.Update(autosaveTick{})
+	a = m.(App)
+
+	b, err := os.ReadFile(swap)
+	if err != nil {
+		t.Fatalf("swap file: %v", err)
+	}
+	if string(b) != "hola mundo" {
+		t.Errorf("swap content = %q, want %q", b, "hola mundo")
+	}
+}
+
+// Opening a document whose swap is newer than it offers to recover the
+// swap's content instead of silently preferring one or the other.
+func TestOpeningADocumentWithANewerSwapOffersRecovery(t *testing.T) {
+	setup := func(t *testing.T) (path, swap string) {
+		t.Helper()
+		cfgDir := t.TempDir()
+		userConfigDir = func() (string, error) { return cfgDir, nil }
+
+		dir := t.TempDir()
+		path = filepath.Join(dir, "draft.md")
+		if err := os.WriteFile(path, []byte("en disco"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		swap = filepath.Join(dir, ".draft.md.swp")
+		if err := os.WriteFile(swap, []byte("autosalvado"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		future := time.Now().Add(time.Second)
+		if err := os.Chtimes(swap, future, future); err != nil {
+			t.Fatal(err)
+		}
+		return path, swap
+	}
+
+	t.Run("y recovers it", func(t *testing.T) {
+		path, _ := setup(t)
+		a, err := NewApp(path)
+		if err != nil {
+			t.Fatalf("NewApp: %v", err)
+		}
+		if a.mode != ModeConfirm {
+			t.Fatalf("mode = %v, want ModeConfirm", a.mode)
+		}
+
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+		if a.ed.Text() != "autosalvado" {
+			t.Errorf("Text() = %q, want the recovered content", a.ed.Text())
+		}
+		if !a.ed.Modified {
+			t.Error("recovered content must be marked modified")
+		}
+	})
+
+	t.Run("n keeps the disk version and drops the swap", func(t *testing.T) {
+		path, swap := setup(t)
+		a, err := NewApp(path)
+		if err != nil {
+			t.Fatalf("NewApp: %v", err)
+		}
+
+		a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+		if a.ed.Text() != "en disco" {
+			t.Errorf("Text() = %q, want the disk content untouched", a.ed.Text())
+		}
+		if _, err := os.Stat(swap); !os.IsNotExist(err) {
+			t.Error("declining recovery should have removed the swap")
+		}
+	})
+}
+
+// A save has nothing left to recover from, so it clears the swap it leaves
+// behind while editing.
+func TestSavingRemovesTheSwap(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	path := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(path, []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	swap := filepath.Join(filepath.Dir(path), ".draft.md.swp")
+
+	a = typeRunes(a, " mundo")
+	if err := a.ed.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	if _, err := os.Stat(swap); !os.IsNotExist(err) {
+		t.Error("a clean save should have removed the swap")
+	}
+}
+
+// Only a real crash should leave a swap behind — any controlled exit,
+// declined or not, has already run the cleanup a crash never gets to.
+func TestQuittingRemovesTheSwap(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	path := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(path, []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewApp(path)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	swap := filepath.Join(filepath.Dir(path), ".draft.md.swp")
+
+	a = typeRunes(a, " mundo")
+	if err := a.ed.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+
+	a, cmd := press(a, tea.KeyMsg{Type: tea.KeyCtrlQ})
+	if a.mode != ModeConfirm {
+		t.Fatalf("mode = %v, want ModeConfirm (there are unsaved changes)", a.mode)
+	}
+	a, cmd = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if !isQuit(cmd) {
+		t.Fatal("y did not quit")
+	}
+
+	if _, err := os.Stat(swap); !os.IsNotExist(err) {
+		t.Error("quitting should have removed the swap")
+	}
+}
+
+// Switching to another document is exactly the case autosave exists for —
+// unsaved changes with no save in sight — so the old document's swap has to
+// survive it.
+func TestSwitchingDocumentsKeepsTheOldSwap(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.md")
+	second := filepath.Join(dir, "second.md")
+	if err := os.WriteFile(first, []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte("adios"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp(first)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a = typeRunes(a, " mundo")
+	if err := a.ed.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+	swap := filepath.Join(dir, ".first.md.swp")
+
+	a.mode = ModeOpen
+	a.exp.refresh(dir, "second.md")
+	a, _ = a.enterSelection(false)
+
+	if a.ed.Path != second {
+		t.Fatalf("Path = %q, want %q", a.ed.Path, second)
+	}
+	if _, err := os.Stat(swap); err != nil {
+		t.Error("switching documents without saving should not remove the old swap")
 	}
 }
