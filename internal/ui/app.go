@@ -510,14 +510,24 @@ func (a *App) openFind() tea.Cmd {
 func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		// Esc backs out one step at a time: first the filter, then the dialog.
-		if a.exp.filter != "" {
+		// Esc backs out one step at a time: the filter, then recent, then
+		// the dialog.
+		switch {
+		case a.exp.filter != "":
 			a.exp.setFilter("")
-			return a, nil
+		case a.exp.recent:
+			a.exp.refresh(a.exp.dir, "")
+		default:
+			a.mode = ModeWrite
 		}
-		a.mode = ModeWrite
 	case "enter":
 		return a.enterSelection(false)
+	case "ctrl+r":
+		if a.exp.recent {
+			a.exp.refresh(a.exp.dir, "")
+		} else {
+			a.exp.refreshRecent(recentEntries(a.st))
+		}
 	default:
 		a.browse(msg)
 	}

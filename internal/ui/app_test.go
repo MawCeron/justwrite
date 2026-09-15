@@ -874,3 +874,82 @@ func TestSwitchingDocumentsRestoresAndRecordsCursor(t *testing.T) {
 		t.Errorf("Cursor() = %d, want 4 (restored on returning to first.md)", got)
 	}
 }
+
+// ctrl+r in the open dialog swaps the listing for recent files, and again
+// to go back — selecting one opens it the same as picking it from a
+// directory would.
+func TestCtrlRTogglesRecentFilesInTheOpenDialog(t *testing.T) {
+	cfgDir := t.TempDir()
+	userConfigDir = func() (string, error) { return cfgDir, nil }
+
+	dir := t.TempDir()
+	older := filepath.Join(dir, "older.md")
+	newer := filepath.Join(dir, "newer.md")
+	if err := os.WriteFile(older, []byte("hola"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newer, []byte("adios"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := NewApp("")
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	a.st.Documents = map[string]docState{
+		older: {Cursor: 0, Opened: time.Now().Add(-time.Hour)},
+		newer: {Cursor: 3, Opened: time.Now()},
+	}
+
+	a.mode = ModeOpen
+	a.exp.refresh(dir, "")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlR})
+
+	if !a.exp.recent {
+		t.Fatal("ctrl+r did not switch to the recent list")
+	}
+	if it, ok := a.exp.selected(); !ok || it.path != newer {
+		t.Fatalf("first entry = %+v, want newer.md (most recently opened)", it)
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if a.ed.Path != newer {
+		t.Fatalf("Path = %q, want %q", a.ed.Path, newer)
+	}
+	if a.ed.Cursor() != 3 {
+		t.Errorf("Cursor() = %d, want 3 (restored, same as any other reopen)", a.ed.Cursor())
+	}
+
+	// A second ctrl+r goes back to browsing the directory.
+	a.mode = ModeOpen
+	a.exp.refresh(dir, "")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlR})
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlR})
+
+	if a.exp.recent {
+		t.Error("a second ctrl+r should have returned to the directory listing")
+	}
+}
+
+// Esc steps back through the filter, then recent, then the dialog itself —
+// one thing at a time, never more than what was just done.
+func TestEscBacksOutOfRecentBeforeClosingTheDialog(t *testing.T) {
+	a := testApp(t)
+	a.mode = ModeOpen
+	a.exp.refresh(t.TempDir(), "")
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlR})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != ModeOpen {
+		t.Fatalf("mode = %v after one esc, want still ModeOpen", a.mode)
+	}
+	if a.exp.recent {
+		t.Error("esc did not back out of the recent list")
+	}
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != ModeWrite {
+		t.Errorf("mode = %v after a second esc, want ModeWrite", a.mode)
+	}
+}
