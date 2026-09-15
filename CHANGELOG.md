@@ -26,6 +26,9 @@ and this project uses [Semantic Versioning](https://semver.org/).
   dialog, or launching justwrite with its path again — puts the cursor back
   where it was left, instead of always at the end.
 - `Ctrl+R` in the open dialog lists the ten most recently opened files.
+- Autosave and crash recovery: unsaved changes are written to a hidden swap
+  file every few seconds, and offered back the next time the document opens
+  if the swap is newer than it.
 
 ### Changed
 

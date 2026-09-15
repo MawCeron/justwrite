@@ -192,6 +192,12 @@ Three, cycled with `←`/`→` from the help panel (`F1`):
 renamed into place, so an interrupted or failed save leaves the previous draft
 intact rather than a half-written file.
 
+**Unsaved changes survive a crash.** Every few seconds, and only while there
+is something unsaved, justwrite writes a hidden `.name.swp` file beside the
+document — the same atomic write a real save uses. A clean save or a clean
+quit removes it; if it is ever still there and newer than the document the
+next time it opens, justwrite offers to recover it.
+
 **Line endings are preserved.** A file that uses CRLF keeps using CRLF;
 everything else is saved as LF. A file that mixes both is saved as CRLF.
 
