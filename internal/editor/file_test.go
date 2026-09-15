@@ -503,3 +503,173 @@ func TestIsBinary(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteSwapCreatesADotfileBesideTheDocument(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	e := New()
+	e.Path = path
+	e.SetText("borrador")
+
+	if err := e.WriteSwap(); err != nil {
+		t.Fatalf("WriteSwap: %v", err)
+	}
+
+	swap := filepath.Join(filepath.Dir(path), ".nota.md.swp")
+	b, err := os.ReadFile(swap)
+	if err != nil {
+		t.Fatalf("swap file: %v", err)
+	}
+	if string(b) != "borrador" {
+		t.Errorf("swap content = %q, want %q", b, "borrador")
+	}
+
+	// The write goes through a temp file, same as a real save; nothing else
+	// should be left behind in the directory.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("directory has %d entries after WriteSwap, want 1", len(entries))
+	}
+}
+
+func TestWriteSwapIsANoOpWithoutAPath(t *testing.T) {
+	e := New()
+	e.SetText("sin nombre todavia")
+	if err := e.WriteSwap(); err != nil {
+		t.Errorf("WriteSwap on an unnamed document: %v", err)
+	}
+}
+
+func TestRemoveSwapDeletesIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	e := New()
+	e.Path = path
+	e.SetText("borrador")
+	if err := e.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.RemoveSwap(); err != nil {
+		t.Fatalf("RemoveSwap: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), ".nota.md.swp")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("the swap file is still there")
+	}
+
+	// Neither a missing swap nor an unnamed document is an error.
+	if err := e.RemoveSwap(); err != nil {
+		t.Errorf("RemoveSwap with nothing to remove: %v", err)
+	}
+	if err := New().RemoveSwap(); err != nil {
+		t.Errorf("RemoveSwap on an unnamed document: %v", err)
+	}
+}
+
+// PendingSwap is what Load's caller checks afterward to decide whether to
+// offer recovery: a swap newer than the document is worth having, one that
+// is not is stale leftovers from before the last real save.
+func TestPendingSwap(t *testing.T) {
+	t.Run("newer swap is offered", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "nota.md")
+		if err := os.WriteFile(path, []byte("guardado"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		touchLater(t, path)
+
+		e := New()
+		if err := e.Load(path); err != nil {
+			t.Fatal(err)
+		}
+		e.SetText("autosalvado, más nuevo")
+		if err := e.WriteSwap(); err != nil {
+			t.Fatal(err)
+		}
+		touchLater(t, filepath.Join(filepath.Dir(path), ".nota.md.swp"))
+
+		content, ok := e.PendingSwap()
+		if !ok || content != "autosalvado, más nuevo" {
+			t.Errorf("PendingSwap = %q, %v, want the swap content and true", content, ok)
+		}
+	})
+
+	t.Run("a swap no newer than the document is stale and removed", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "nota.md")
+		if err := os.WriteFile(path, []byte("guardado"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		e := New()
+		e.Path = path
+		e.SetText("vieja")
+		if err := e.WriteSwap(); err != nil {
+			t.Fatal(err)
+		}
+		touchLater(t, path) // the document is now newer than its own stale swap
+
+		if _, ok := e.PendingSwap(); ok {
+			t.Error("a stale swap was offered as pending")
+		}
+		if _, err := os.Stat(e.swapPath()); !errors.Is(err, os.ErrNotExist) {
+			t.Error("the stale swap was not removed")
+		}
+	})
+
+	t.Run("a swap for a document that no longer exists is still pending", func(t *testing.T) {
+		e := New()
+		e.Path = filepath.Join(t.TempDir(), "borrado.md")
+		e.SetText("todo lo que queda")
+		if err := e.WriteSwap(); err != nil {
+			t.Fatal(err)
+		}
+
+		content, ok := e.PendingSwap()
+		if !ok || content != "todo lo que queda" {
+			t.Errorf("PendingSwap = %q, %v, want the swap content and true", content, ok)
+		}
+	})
+
+	t.Run("no swap at all", func(t *testing.T) {
+		e := New()
+		e.Path = filepath.Join(t.TempDir(), "nota.md")
+		if _, ok := e.PendingSwap(); ok {
+			t.Error("PendingSwap found something out of nothing")
+		}
+	})
+}
+
+// touchLater sets path's mtime one second in the future, so a following
+// comparison is unambiguous on filesystems with coarse mtime resolution.
+func touchLater(t *testing.T, path string) {
+	t.Helper()
+	future := time.Now().Add(time.Second)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRecoverSwapReplacesTheBufferAsModified(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("en disco"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatal(err)
+	}
+
+	e.RecoverSwap("recuperado")
+
+	if e.Text() != "recuperado" {
+		t.Errorf("Text() = %q, want %q", e.Text(), "recuperado")
+	}
+	if !e.Modified {
+		t.Error("a recovered buffer must be marked modified")
+	}
+	// SetText clears loadedModTime; a save right after recovering must not
+	// mistake the untouched file on disk for an external change.
+	if err := e.Save(); err != nil {
+		t.Errorf("Save right after recovering: %v", err)
+	}
+}

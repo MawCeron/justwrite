@@ -109,21 +109,44 @@ func (e *Editor) writeFile() error {
 	// from it.
 	e.CommitPending()
 
-	mode := os.FileMode(0o644)
-	if info, err := os.Stat(e.Path); err == nil {
-		mode = info.Mode().Perm()
-	}
-
-	dir := filepath.Dir(e.Path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(e.Path)+".*.tmp")
-	if err != nil {
+	if err := atomicWrite(e.Path, e.crlfText(), e.modeFor(e.Path)); err != nil {
 		return err
 	}
-	tmpPath := tmp.Name()
+	e.saved = e.currentSeq()
+	e.Modified = false
+	e.refreshLoadedStat()
+	return nil
+}
+
+// modeFor is path's current permission bits, or a sane default for a path
+// that does not exist yet.
+func (e *Editor) modeFor(path string) os.FileMode {
+	if info, err := os.Stat(path); err == nil {
+		return info.Mode().Perm()
+	}
+	return 0o644
+}
+
+// crlfText is the buffer's text, restored to CRLF first if that is what the
+// file used when it was loaded.
+func (e *Editor) crlfText() string {
 	text := e.Text()
 	if e.crlf {
 		text = strings.ReplaceAll(text, "\n", "\r\n")
 	}
+	return text
+}
+
+// atomicWrite writes text to path through a temp file in the same directory,
+// synced before the rename that puts it in place — an interrupted or failed
+// write can never leave a half-written file where the finished one was.
+func atomicWrite(path, text string, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
 	if _, err := tmp.WriteString(text); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
@@ -143,14 +166,11 @@ func (e *Editor) writeFile() error {
 		os.Remove(tmpPath)
 		return err
 	}
-	if err := os.Rename(tmpPath, e.Path); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
 	syncDir(dir)
-	e.saved = e.currentSeq()
-	e.Modified = false
-	e.refreshLoadedStat()
 	return nil
 }
 
@@ -183,6 +203,82 @@ func (e *Editor) SaveAs(path string) error {
 		return err
 	}
 	return nil
+}
+
+// ─── Autosave ────────────────────────────────────────────────────────────────
+
+// swapPath is where autosave keeps its copy: a dotfile beside the document,
+// so it stays out of the open dialog's listing by default the same way any
+// other hidden file does. Empty for an unnamed document — there is no
+// "beside" for it to live.
+func (e *Editor) swapPath() string {
+	if e.Path == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(e.Path), "."+filepath.Base(e.Path)+".swp")
+}
+
+// WriteSwap writes the buffer's current content to the swap file, the same
+// atomic way a real save writes the document — a crash mid-write must never
+// leave a half-written swap later offered as something to recover. A no-op
+// for an unnamed document.
+func (e *Editor) WriteSwap() error {
+	sp := e.swapPath()
+	if sp == "" {
+		return nil
+	}
+	return atomicWrite(sp, e.crlfText(), e.modeFor(e.Path))
+}
+
+// RemoveSwap deletes the swap file, once it is no longer needed: a clean
+// save or a clean quit. A missing swap, or an unnamed document with no swap
+// to have, is not an error.
+func (e *Editor) RemoveSwap() error {
+	sp := e.swapPath()
+	if sp == "" {
+		return nil
+	}
+	if err := os.Remove(sp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// PendingSwap reports the swap's content, if one exists beside Path and is
+// newer than the document itself — evidence of an autosave that never made
+// it into a real save. A swap that is not newer is stale rather than
+// pending: some later, real save already superseded whatever it held, and it
+// is removed here rather than left to linger forever.
+func (e *Editor) PendingSwap() (content string, ok bool) {
+	sp := e.swapPath()
+	if sp == "" {
+		return "", false
+	}
+	swapInfo, err := os.Stat(sp)
+	if err != nil {
+		return "", false
+	}
+	if docInfo, err := os.Stat(e.Path); err == nil && !swapInfo.ModTime().After(docInfo.ModTime()) {
+		os.Remove(sp)
+		return "", false
+	}
+	b, err := os.ReadFile(sp)
+	if err != nil {
+		return "", false
+	}
+	text, _ := normalizeLineEndings(string(b))
+	return text, true
+}
+
+// RecoverSwap replaces the buffer with content recovered from the swap file,
+// as an unsaved change — the point of recovering it is that it differs from
+// whatever is on disk. SetText clears loadedModTime along with everything
+// else it resets; the file on disk has not changed, so it is restored right
+// after rather than left to misreport an external change on the next save.
+func (e *Editor) RecoverSwap(content string) {
+	e.SetText(content)
+	e.Modified = true
+	e.refreshLoadedStat()
 }
 
 // IsBinary reports whether a file looks like something other than text, using
