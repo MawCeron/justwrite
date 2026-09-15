@@ -109,6 +109,17 @@ func TestPreview(t *testing.T) {
 	// look like noise and publish somebody's home directory layout.
 	dialog.exp.dir = "/home/you/writing"
 	write("dialog", dialog)
+
+	recent := scene()
+	recent.mode = ModeOpen
+	// Entries staged the same way as dialog's own directory label above:
+	// realistic paths that are not actually anyone's real directory layout.
+	recent.exp.refreshRecent([]entry{
+		{name: "/home/you/writing/chapter-03.md", path: "chapter-03.md", recent: true},
+		{name: "/home/you/writing/notes/outline.md", path: "outline.md", recent: true},
+		{name: "/home/you/journal/2026-08-10.md", path: "2026-08-10.md", recent: true},
+	})
+	write("dialog-recent", recent)
 }
 
 // fixtureDir builds a directory that looks like somewhere a book is being
