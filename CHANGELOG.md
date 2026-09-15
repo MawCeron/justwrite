@@ -25,6 +25,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - Reopening a document — saving it, switching to another through the open
   dialog, or launching justwrite with its path again — puts the cursor back
   where it was left, instead of always at the end.
+- `Ctrl+R` in the open dialog lists the ten most recently opened files.
 
 ### Changed
 

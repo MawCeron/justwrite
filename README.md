@@ -130,11 +130,18 @@ session, `d` for the whole document; either shows as `current / goal` once set:
 |---|---|
 | type | Filter the listing |
 | `Ctrl+H` | Show hidden and binary files |
+| `Ctrl+R` | Ten most recently opened files (open dialog only) |
 | `Tab` | Switch between the listing and the filename field |
 | `Enter` | Enter a directory, or open the file |
-| `Esc` | Clear the filter, then close |
+| `Esc` | Clear the filter, then the recent list, then close |
 
 ![The open dialog listing a writing directory, directories first](assets/dialog.svg)
+
+`Ctrl+R` swaps the listing for recently opened files, most recent first —
+useful when a draft and a journal live in folders that are nowhere near each
+other:
+
+![The open dialog showing recently opened files instead of a directory](assets/dialog-recent.svg)
 
 Binary files and dotfiles stay out of the listing by default. Stepping up to the
 parent leaves the cursor on the directory you came out of.
