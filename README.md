@@ -196,10 +196,13 @@ elsewhere lands as a single undo step.
 meaning on its own.
 
 **Settings live in a config file, not environment variables.** The stats
-panel's session and document goals are the only things justwrite remembers
-between runs today, kept at the OS's usual config location (e.g.
-`~/.config/justwrite/config` on Linux) and written only from inside the app —
-there is nothing to edit by hand.
+panel's session and document goals, and the active theme, are kept at the
+OS's usual config location (e.g. `~/.config/justwrite/config` on Linux) and
+written only from inside the app — there is nothing to edit by hand.
+
+**Reopening a document remembers where you left it.** The cursor position
+for every file justwrite has opened lives in a separate state file next to
+config, capped at the 50 most recent.
 
 ## Project structure
 

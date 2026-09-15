@@ -22,6 +22,9 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - Three themes — screen (pure ANSI, the default), paper (a real light page),
   and mono (grayscale ANSI) — cycled with `←`/`→` from the help panel and
   saved to the config file.
+- Reopening a document — saving it, switching to another through the open
+  dialog, or launching justwrite with its path again — puts the cursor back
+  where it was left, instead of always at the end.
 
 ### Changed
 
