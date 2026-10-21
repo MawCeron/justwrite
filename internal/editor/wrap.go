@@ -120,7 +120,9 @@ func (e *Editor) wrap(width int) []VisualLine {
 			}
 			wrapAt := max(over-segStart, 1) // a rune wider than the page still takes a row
 			for i := over - 1; i >= segStart; i-- {
-				if e.buf[i] == ' ' {
+				// Not after a space that a combining mark or joiner follows: the
+				// mark belongs to the space, and a row cannot start with it.
+				if e.buf[i] == ' ' && (i+1 >= logicalEnd || base[i+1-pos] != 0 || e.buf[i+1] == '\t') {
 					wrapAt = i - segStart + 1 // the space stays on this row
 					break
 				}

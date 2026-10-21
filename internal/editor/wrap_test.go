@@ -2,10 +2,14 @@ package editor
 
 import (
 	"fmt"
+	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 )
 
 func rows(e *Editor, width int) []string {
@@ -193,6 +197,7 @@ func TestVisualLinesMeasuresGraphemeClusters(t *testing.T) {
 	}{
 		{"a ZWJ sequence is two cells", family + family + family, 4, []string{family + family, family}},
 		{"a flag is two cells", flag + flag + flag, 4, []string{flag + flag, flag}},
+		{"a mark after a space stays with it", "ab \u0301cd", 4, []string{"ab \u0301c", "d"}},
 		{"a tab after a cluster still runs to the stop", flag + "\tb", 8, []string{flag + "\tb"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -251,4 +256,51 @@ func TestVisualLinesCacheSeesEveryEdit(t *testing.T) {
 	if got := rows(e, 20); strings.Join(got, "|") != "unodos tres" {
 		t.Errorf("at another width: %q", got)
 	}
+}
+
+// Whatever the text, a row measured the way the page draws it, by RowWidths,
+// fits the width the wrapper was given — unless it is a single cluster wider
+// than the page, which has nowhere to go. The wrapper measures a whole line and
+// the renderer a row at a time, so a break that lands inside a cluster, or
+// leaves a mark orphaned at the start of a row, makes them disagree.
+func TestRowsFitTheirWidthWhateverTheText(t *testing.T) {
+	alphabet := []rune{'a', 'b', ' ', ' ', '́', '你', '😀', '\t', '‍'}
+	rng := rand.New(rand.NewPCG(1, 2))
+
+	for range 3000 {
+		text := make([]rune, 1+rng.IntN(30))
+		for i := range text {
+			text[i] = alphabet[rng.IntN(len(alphabet))]
+		}
+		e := New()
+		e.SetText(string(text))
+
+		for width := 3; width <= 8; width++ {
+			for _, vl := range e.VisualLines(width) {
+				row := e.buf[vl.Start:vl.End]
+				total := 0
+				for _, w := range RowWidths(row) {
+					total += w
+				}
+				if vl.Start > 0 && e.buf[vl.Start-1] != '\n' && len(row) > 0 && joinsPrevious(e.buf[vl.Start-1], row[0]) {
+					t.Fatalf("text %q at width %d: row %q starts mid-cluster", string(text), width, string(row))
+				}
+				if total > width && len(row) > 1 && !onlyOneCluster(row) {
+					t.Fatalf("text %q at width %d: row %q is %d cells wide", string(text), width, string(row), total)
+				}
+			}
+		}
+	}
+}
+
+func onlyOneCluster(row []rune) bool {
+	w := clusterWidths(row)
+	return w[0] > 0 && !slices.ContainsFunc(w[1:], func(n int) bool { return n > 0 })
+}
+
+// joinsPrevious reports whether next is part of the grapheme cluster prev
+// starts, so a row break between them cuts a cluster in two.
+func joinsPrevious(prev, next rune) bool {
+	cluster, _, _, _ := uniseg.FirstGraphemeClusterInString(string([]rune{prev, next}), -1)
+	return utf8.RuneCountInString(cluster) == 2
 }
