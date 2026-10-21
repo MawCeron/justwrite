@@ -190,3 +190,43 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+// The binary check is what the open dialog used to do while building its
+// listing, on the UI thread. As a command it has to find the same files and
+// then hide them without losing the entry the cursor was on.
+func TestSniffHidesBinariesAfterTheListingIsUp(t *testing.T) {
+	dir := sampleDir(t)
+	e := explorer{dir: dir}
+	for _, name := range []string{"alpha.md", "gamma.txt", "imagen.png"} { // listed, not yet sniffed
+		e.all = append(e.all, entry{name: name, path: filepath.Join(dir, name)})
+	}
+	e.apply()
+	e.focusOn("gamma.txt")
+
+	msg := e.sniff()().(sniffed)
+	e.markBinary(msg)
+
+	if len(msg.binary) != 1 || !msg.binary[filepath.Join(dir, "imagen.png")] {
+		t.Errorf("sniffed %v, want just imagen.png", msg.binary)
+	}
+	if got := strings.Join(names(&e), " "); got != "alpha.md gamma.txt" {
+		t.Errorf("listing = %q, want the binary hidden", got)
+	}
+	if it, _ := e.selected(); it.name != "gamma.txt" {
+		t.Errorf("cursor moved to %q, want it to stay on gamma.txt", it.name)
+	}
+}
+
+// A result for a directory the user has already left must not touch the
+// listing now on screen.
+func TestSniffResultForAnotherDirectoryIsIgnored(t *testing.T) {
+	var e explorer
+	e.refresh(sampleDir(t), "")
+	before := len(e.shown)
+
+	e.markBinary(sniffed{dir: "/elsewhere", binary: map[string]bool{filepath.Join(e.dir, "alpha.md"): true}})
+
+	if len(e.shown) != before {
+		t.Errorf("a stale result changed the listing: %d rows, want %d", len(e.shown), before)
+	}
+}

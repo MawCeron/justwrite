@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/MawCeron/justwrite/internal/editor"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -81,6 +83,61 @@ func (e *explorer) refresh(dir, focus string) {
 	e.all = append(e.all, files...)
 	e.apply()
 	e.focusOn(focus)
+}
+
+// sniffed carries the result of sniffing one directory's files for binary
+// content, back to the update loop.
+type sniffed struct {
+	dir    string
+	binary map[string]bool // by path
+}
+
+// sniff reads every file in the listing once, off the UI thread, and reports
+// which ones look binary. A slow disk or a network share stalls this command,
+// not the keystroke that opened the directory.
+func (e *explorer) sniff() tea.Cmd {
+	dir := e.dir
+	var paths []string
+	for _, it := range e.all {
+		if !it.isDir && !it.noise {
+			paths = append(paths, it.path)
+		}
+	}
+	return func() tea.Msg {
+		binary := map[string]bool{}
+		for _, p := range paths {
+			if editor.IsBinary(p) {
+				binary[p] = true
+			}
+		}
+		return sniffed{dir: dir, binary: binary}
+	}
+}
+
+// markBinary applies a sniff result to the listing, unless it has moved on
+// since: another directory, or the recent list, which has no binaries to hide.
+// The cursor stays on the entry it was on, however many rows vanish above it.
+func (e *explorer) markBinary(s sniffed) {
+	if s.dir != e.dir || e.recent {
+		return
+	}
+	for i := range e.all {
+		if s.binary[e.all[i].path] {
+			e.all[i].noise = true
+		}
+	}
+	sel, ok := e.selected()
+	e.apply()
+	if !ok {
+		return
+	}
+	for i, it := range e.shown {
+		if it.path == sel.path {
+			e.cursor = i
+			e.offset = clamp(e.offset, max(i-1, 0), i)
+			return
+		}
+	}
 }
 
 // refreshRecent swaps the listing for entries, most recently opened first.
