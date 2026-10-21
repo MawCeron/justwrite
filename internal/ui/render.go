@@ -48,7 +48,6 @@ func (a App) View() string {
 func (a App) page() []string {
 	width, height := a.textWidth(), a.textHeight()
 	vlines := a.ed.VisualLines(width)
-	a.ed.AdjustScroll(vlines, height)
 
 	cursorRow := a.ed.CursorVisualLine(vlines)
 	leftPad := max((a.w-width)/2, 0)

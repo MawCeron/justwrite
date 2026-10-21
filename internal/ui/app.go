@@ -181,11 +181,22 @@ func (a App) Init() tea.Cmd {
 // tells the terminal about it — rather than repainting the title every frame.
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := a.update(msg)
+	next.followCursor()
 	if t := next.windowTitle(); t != next.title {
 		next.title = t
 		cmd = tea.Batch(cmd, tea.SetWindowTitle(t))
 	}
 	return next, cmd
+}
+
+// followCursor scrolls the page to keep the cursor in view. It runs once per
+// Update, where the window size and whatever moved the cursor are both known,
+// so rendering only reads the scroll offset and never writes it.
+func (a App) followCursor() {
+	if a.w < minWidth || a.h < minHeight {
+		return
+	}
+	a.ed.AdjustScroll(a.ed.VisualLines(a.textWidth()), a.textHeight())
 }
 
 func (a App) update(msg tea.Msg) (App, tea.Cmd) {

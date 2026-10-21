@@ -660,8 +660,6 @@ func TestFindScrollsTheMatchIntoView(t *testing.T) {
 	a = typeRunes(a, "line90")
 	a, _ = press(a, tea.KeyMsg{Type: tea.KeyEnter})
 
-	a.View() // the page's own render pass is what calls AdjustScroll
-
 	vlines := a.ed.VisualLines(a.textWidth())
 	cursorRow := a.ed.CursorVisualLine(vlines)
 	height := a.textHeight()
@@ -1176,5 +1174,27 @@ func TestPageRowsFitTheTextWidthInCells(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Rendering reads the scroll offset and never writes it: the offset follows
+// the cursor in Update, so drawing the same state twice cannot move the page.
+func TestViewDoesNotScroll(t *testing.T) {
+	a := testApp(t)
+	a.ed.SetText(longDocument())
+	a.ed.SetCursor(len(a.ed.Runes()))
+
+	if a.ed.Scroll != 0 {
+		t.Fatalf("scroll %d before any Update, want 0", a.ed.Scroll)
+	}
+	a.View()
+	if a.ed.Scroll != 0 {
+		t.Errorf("View moved the scroll to %d", a.ed.Scroll)
+	}
+
+	next, _ := a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a = next.(App)
+	if a.ed.Scroll == 0 {
+		t.Error("Update left the cursor at the end of a long document off screen")
 	}
 }
