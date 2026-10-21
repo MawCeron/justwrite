@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func init() {
@@ -1152,5 +1153,28 @@ func TestSwitchingDocumentsKeepsTheOldSwap(t *testing.T) {
 	}
 	if _, err := os.Stat(swap); err != nil {
 		t.Error("switching documents without saving should not remove the old swap")
+	}
+}
+
+// A row of wide characters used to be laid out by rune count, so 60 CJK
+// characters on a 72-cell page rendered 120 cells wide and the terminal
+// re-wrapped it. Every rendered row has to fit the page, in cells.
+func TestPageRowsFitTheTextWidthInCells(t *testing.T) {
+	for name, text := range map[string]string{
+		"cjk":       strings.Repeat("你好世界", 30),
+		"emoji":     strings.Repeat("😀", 100),
+		"combining": strings.Repeat("é", 200),
+	} {
+		t.Run(name, func(t *testing.T) {
+			a := testApp(t)
+			a.ed.SetText(text)
+
+			limit := (a.w-a.textWidth())/2 + a.textWidth() + 1 // +1: the cursor cell past the end
+			for i, row := range a.page() {
+				if w := ansi.StringWidth(row); w > limit {
+					t.Errorf("row %d is %d cells wide, limit %d", i, w, limit)
+				}
+			}
+		})
 	}
 }

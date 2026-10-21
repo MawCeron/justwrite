@@ -1,5 +1,7 @@
 package editor
 
+import "github.com/charmbracelet/x/ansi"
+
 // VisualLine is one rendered row: the slice of the document that lands on it.
 // Wrapping is soft, so a logical line becomes several VisualLines without any
 // character being added to the document.
@@ -12,7 +14,14 @@ type VisualLine struct {
 // of the viewport, so typing at the bottom does not sit on the last row.
 const scrollMargin = 3
 
-// VisualLines breaks the document into rows of at most width columns, breaking
+// cellWidth is how many terminal cells r occupies: two for CJK and emoji,
+// zero for a combining mark, one for everything else.
+//
+// ponytail: per rune, so a multi-rune emoji (ZWJ sequence, flag) counts as the
+// sum of its parts; measure by grapheme cluster if those ever matter.
+func cellWidth(r rune) int { return ansi.StringWidth(string(r)) }
+
+// VisualLines breaks the document into rows of at most width cells, breaking
 // at the last space that fits and hard-breaking a word that never fits.
 //
 // It always returns at least one line: an empty document still has a row for
@@ -44,12 +53,21 @@ func (e *Editor) VisualLines(width int) []VisualLine {
 		}
 
 		for segStart := pos; ; {
-			if logicalEnd-segStart <= width {
+			// over is the first rune that no longer fits on this row.
+			over, cells := segStart, 0
+			for over < logicalEnd {
+				cells += cellWidth(e.buf[over])
+				if cells > width {
+					break
+				}
+				over++
+			}
+			if over == logicalEnd {
 				lines = append(lines, VisualLine{segStart, logicalEnd})
 				break
 			}
-			wrapAt := width
-			for i := segStart + width - 1; i >= segStart; i-- {
+			wrapAt := max(over-segStart, 1) // a rune wider than the page still takes a row
+			for i := over - 1; i >= segStart; i-- {
 				if e.buf[i] == ' ' {
 					wrapAt = i - segStart + 1 // the space stays on this row
 					break
@@ -57,6 +75,9 @@ func (e *Editor) VisualLines(width int) []VisualLine {
 			}
 			lines = append(lines, VisualLine{segStart, segStart + wrapAt})
 			segStart += wrapAt
+			if segStart == logicalEnd {
+				break // that oversized rune was the last one; no empty tail row
+			}
 		}
 
 		if !hasNewline {

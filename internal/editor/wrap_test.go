@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func rows(e *Editor, width int) []string {
@@ -114,4 +116,38 @@ func TestAdjustScroll(t *testing.T) {
 			t.Errorf("Scroll = %d, want %d", e.Scroll, want)
 		}
 	})
+}
+
+// Rows are measured in terminal cells, not runes: a CJK character takes two,
+// a combining mark none. Counting runes let a row grow past the page and the
+// terminal re-wrapped it, throwing the cursor and the centring off.
+func TestVisualLinesMeasuresCells(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		text  string
+		width int
+		want  []string
+	}{
+		{"CJK takes two cells a rune", "你好世界你好", 6, []string{"你好世", "界你好"}},
+		{"an emoji takes two cells", "😀😀😀😀", 4, []string{"😀😀", "😀😀"}},
+		{"a combining mark takes none", "ééé", 2, []string{"éé", "é"}},
+		{"wrapping still prefers the last space", "你好 世界你好", 6, []string{"你好 ", "世界你", "好"}},
+		{"a rune wider than the page still takes a row", "你好", 1, []string{"你", "好"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := New()
+			e.SetText(c.text)
+
+			got := rows(e, c.width)
+
+			if strings.Join(got, "|") != strings.Join(c.want, "|") {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+			for _, row := range got {
+				if w := ansi.StringWidth(row); w > max(c.width, 2) {
+					t.Errorf("row %q is %d cells wide, page is %d", row, w, c.width)
+				}
+			}
+		})
+	}
 }
