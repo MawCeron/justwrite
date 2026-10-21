@@ -778,3 +778,33 @@ func TestFailedSaveAsKeepsTheOldSwap(t *testing.T) {
 		t.Errorf("the swap of the document still in place is gone: %v", err)
 	}
 }
+
+// A document opened through a symlink is still saved to what the link points
+// at; rename would otherwise replace the link itself with a regular file.
+func TestSaveWritesThroughASymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.md")
+	link := filepath.Join(dir, "enlace.md")
+	if err := os.WriteFile(target, []byte("uno"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+
+	e := New()
+	if err := e.Load(link); err != nil {
+		t.Fatal(err)
+	}
+	e.InsertRune('x')
+	if err := e.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlink was replaced: %v, %v", info, err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "unox" {
+		t.Errorf("target holds %q, want unox", b)
+	}
+}

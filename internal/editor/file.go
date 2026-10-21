@@ -149,6 +149,11 @@ func (e *Editor) crlfText() string {
 // synced before the rename that puts it in place — an interrupted or failed
 // write can never leave a half-written file where the finished one was.
 func atomicWrite(path, text string, mode os.FileMode) error {
+	// Rename replaces whatever is at path, so a symlink would be swapped for a
+	// regular file; write through to what it points at instead.
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
