@@ -210,6 +210,11 @@ func (e *Editor) SaveAs(path string) error {
 		e.Path = previous
 		return err
 	}
+	// The old name's autosaved copy is of text that now lives under the new
+	// one; left behind, opening the old file would offer to recover it.
+	if previous != "" && swapFor(previous) != swapFor(path) {
+		os.Remove(swapFor(previous))
+	}
 	return nil
 }
 
@@ -219,11 +224,14 @@ func (e *Editor) SaveAs(path string) error {
 // so it stays out of the open dialog's listing by default the same way any
 // other hidden file does. Empty for an unnamed document — there is no
 // "beside" for it to live.
-func (e *Editor) swapPath() string {
-	if e.Path == "" {
+func (e *Editor) swapPath() string { return swapFor(e.Path) }
+
+// swapFor is the swap file for the document at path.
+func swapFor(path string) string {
+	if path == "" {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(e.Path), "."+filepath.Base(e.Path)+".swp")
+	return filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".swp")
 }
 
 // WriteSwap writes the buffer's current content to the swap file, the same

@@ -729,3 +729,52 @@ func TestLoadRefusesAFileThatIsNotUTF8(t *testing.T) {
 		t.Errorf("the file on disk is now %q", b)
 	}
 }
+
+// Saving under a new name moves the document there. The autosaved copy of the
+// old name would otherwise sit beside the old file, newer than it, and offer to
+// recover text that has already been saved somewhere else.
+func TestSaveAsRemovesTheOldNamesSwap(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "viejo.md")
+	if err := os.WriteFile(old, []byte("uno"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := New()
+	if err := e.Load(old); err != nil {
+		t.Fatal(err)
+	}
+	e.InsertRune('x')
+	if err := e.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.SaveAs(filepath.Join(dir, "nuevo.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".viejo.md.swp")); err == nil {
+		t.Error("the old name's swap survived Save As")
+	}
+}
+
+// A Save As that fails leaves the document where it was, and so its swap.
+func TestFailedSaveAsKeepsTheOldSwap(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "viejo.md")
+	e := New()
+	if err := e.Load(old); err != nil {
+		t.Fatal(err)
+	}
+	e.InsertRune('x')
+	if err := e.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.SaveAs(filepath.Join(dir, "no", "existe", "nuevo.md")); err == nil {
+		t.Fatal("expected the save into a missing directory to fail")
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".viejo.md.swp")); err != nil {
+		t.Errorf("the swap of the document still in place is gone: %v", err)
+	}
+}
