@@ -404,9 +404,11 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 // inside tmux — where a system-clipboard library needs a display server the
 // writerdeck does not have.
 //
-// ponytail: writes to stdout beside the renderer, so a copy can land mid-frame
-// and flicker until the next repaint. Harmless; needs the renderer's lock to
-// fix, which v1 does not expose.
+// It writes to stdout beside the renderer, which cannot tear a frame: the
+// renderer emits each frame as one Write and termenv emits the escape as
+// another, and the os.File behind both serialises whole writes. OSC 52 moves
+// no cursor and prints nothing, so the diff renderer's idea of the screen
+// stays right and nothing needs repainting.
 func toClipboard(s string) tea.Cmd {
 	return func() tea.Msg {
 		termenv.Copy(s)
