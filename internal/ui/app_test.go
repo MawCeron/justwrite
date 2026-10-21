@@ -1198,3 +1198,19 @@ func TestViewDoesNotScroll(t *testing.T) {
 		t.Error("Update left the cursor at the end of a long document off screen")
 	}
 }
+
+// The document keeps its tab bytes; the page draws them as spaces to the next
+// tab stop, so a tab neither disappears nor spills past the text width.
+func TestPageExpandsTabs(t *testing.T) {
+	a := testApp(t)
+	a.ed.SetText("a\tb\tc")
+	a.ed.SetCursor(0)
+
+	row := strings.TrimLeft(ansi.Strip(a.page()[0]), " ")
+	if want := "a   b   c"; !strings.HasPrefix(row, want) {
+		t.Errorf("row %q, want it to start with %q", row, want)
+	}
+	if got := string(a.ed.Runes()); got != "a\tb\tc" {
+		t.Errorf("rendering changed the document to %q", got)
+	}
+}

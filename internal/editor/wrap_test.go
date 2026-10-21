@@ -151,3 +151,29 @@ func TestVisualLinesMeasuresCells(t *testing.T) {
 		})
 	}
 }
+
+// A tab is one rune but runs to the next tab stop. Counting it as one column
+// let a row hold far more than the page, so tabs wrap by the cells they fill.
+func TestVisualLinesExpandsTabs(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		text  string
+		width int
+		want  []string
+	}{
+		{"a tab runs to the next stop", "a\tb\tc", 5, []string{"a\tb", "\tc"}},
+		{"a tab at a stop takes a whole stop", "\t\t\t", 8, []string{"\t\t", "\t"}},
+		{"a tab fits when the row has room", "a\tb", 10, []string{"a\tb"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := New()
+			e.SetText(c.text)
+
+			got := rows(e, c.width)
+
+			if strings.Join(got, "|") != strings.Join(c.want, "|") {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}

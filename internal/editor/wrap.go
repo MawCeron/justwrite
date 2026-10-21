@@ -14,12 +14,22 @@ type VisualLine struct {
 // of the viewport, so typing at the bottom does not sit on the last row.
 const scrollMargin = 3
 
-// cellWidth is how many terminal cells r occupies: two for CJK and emoji,
-// zero for a combining mark, one for everything else.
+// TabStop is the width of a tab stop, and of what the Tab key inserts.
+const TabStop = 4
+
+// CellWidth is how many terminal cells r occupies when it lands at column col
+// of its row: a tab runs to the next tab stop, CJK and emoji take two, a
+// combining mark none, and everything else one. The document keeps its tab
+// bytes; only the page expands them.
 //
 // ponytail: per rune, so a multi-rune emoji (ZWJ sequence, flag) counts as the
 // sum of its parts; measure by grapheme cluster if those ever matter.
-func cellWidth(r rune) int { return ansi.StringWidth(string(r)) }
+func CellWidth(r rune, col int) int {
+	if r == '\t' {
+		return TabStop - col%TabStop
+	}
+	return ansi.StringWidth(string(r))
+}
 
 // VisualLines breaks the document into rows of at most width cells, breaking
 // at the last space that fits and hard-breaking a word that never fits.
@@ -56,7 +66,7 @@ func (e *Editor) VisualLines(width int) []VisualLine {
 			// over is the first rune that no longer fits on this row.
 			over, cells := segStart, 0
 			for over < logicalEnd {
-				cells += cellWidth(e.buf[over])
+				cells += CellWidth(e.buf[over], cells)
 				if cells > width {
 					break
 				}

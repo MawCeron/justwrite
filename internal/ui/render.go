@@ -130,11 +130,16 @@ func (a App) renderLine(vl editor.VisualLine, isCursorRow bool) string {
 		}
 	}
 
+	col := 0
 	for i := vl.Start; i <= vl.End; i++ {
-		r := ' '
+		text := " "
 		switch {
 		case i < vl.End:
-			r = buf[i]
+			text = string(buf[i])
+			if buf[i] == '\t' {
+				text = strings.Repeat(" ", editor.CellWidth('\t', col))
+			}
+			col += editor.CellWidth(buf[i], col)
 		case i != cursor:
 			// Past the end of the row, with no cursor to park here.
 			flush()
@@ -153,7 +158,7 @@ func (a App) renderLine(vl editor.VisualLine, isCursorRow bool) string {
 			flush()
 			runClass = class
 		}
-		run.WriteRune(r)
+		run.WriteString(text)
 	}
 	flush()
 	return out.String()

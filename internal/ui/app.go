@@ -389,7 +389,7 @@ func (a App) keyWrite(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "delete":
 		a.ed.DeleteForward()
 	case "tab":
-		a.ed.InsertString("    ")
+		a.ed.InsertString(strings.Repeat(" ", editor.TabStop))
 	default:
 		a.typeInto(msg)
 	}
