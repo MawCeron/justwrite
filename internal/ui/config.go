@@ -22,20 +22,20 @@ type config struct {
 // machine running them actually has configured.
 var userConfigDir = os.UserConfigDir
 
-// configPath is where those settings live on disk.
-func configPath() (string, error) {
+// appFile is where one of justwrite's files lives on disk, beside the others.
+func appFile(name string) (string, error) {
 	dir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "justwrite", "config"), nil
+	return filepath.Join(dir, "justwrite", name), nil
 }
 
 // loadConfig reads the settings file. A missing file is not an error — it
 // just means nothing has been changed from the defaults yet.
 func loadConfig() config {
 	var c config
-	path, err := configPath()
+	path, err := appFile("config")
 	if err != nil {
 		return c
 	}
@@ -79,7 +79,7 @@ func loadConfig() config {
 // cheaper than a parser that remembers where every other line was. A goal
 // left at 0 (never set, or cleared) is simply omitted.
 func (c config) save() error {
-	path, err := configPath()
+	path, err := appFile("config")
 	if err != nil {
 		return err
 	}

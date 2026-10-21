@@ -28,21 +28,12 @@ type state struct {
 	Documents map[string]docState `json:"documents"`
 }
 
-// statePath is where that file lives on disk.
-func statePath() (string, error) {
-	dir, err := userConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "justwrite", "state"), nil
-}
-
 // loadState reads the state file. A missing or unreadable one is not an
 // error — it just means nothing has been recorded yet.
 func loadState() state {
 	empty := state{Documents: map[string]docState{}}
 
-	path, err := statePath()
+	path, err := appFile("state")
 	if err != nil {
 		return empty
 	}
@@ -60,7 +51,7 @@ func loadState() state {
 
 // save writes the whole file, the same way config does.
 func (s state) save() error {
-	path, err := statePath()
+	path, err := appFile("state")
 	if err != nil {
 		return err
 	}
