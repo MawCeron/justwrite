@@ -26,6 +26,16 @@ and this project uses [Semantic Versioning](https://semver.org/).
   from the conflict panel removes the discarded edits' copy.
 - Saving a document opened through a symlink writes to its target and keeps the
   link.
+- Recovering autosaved text from a CRLF file keeps its CRLF line endings.
+- Saving through a symlink whose target does not exist yet creates the target
+  and keeps the link.
+- Pasted text has control characters (escape sequences included) removed.
+- A wrapped row no longer starts with a combining mark or joiner cut off from
+  the space before it.
+- Up and down forget their remembered column after select all, and after
+  anything else that moves the cursor.
+- The open dialog keeps its highlight on the same file when binaries above it
+  are hidden after a slow directory read.
 - Long documents wrap once per change instead of several times per keystroke.
 - Literal tabs in a loaded file are drawn as spaces to the next tab stop
   instead of spilling past the page. The file itself is not changed.
