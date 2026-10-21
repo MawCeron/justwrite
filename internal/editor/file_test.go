@@ -845,3 +845,30 @@ func TestRecoverSwapKeepsCRLF(t *testing.T) {
 		t.Errorf("file = %q, want CRLF kept", b)
 	}
 }
+
+// A link whose target does not exist yet, a note linked into a sync folder
+// before its first save, is still a link: the save creates the target.
+func TestSaveCreatesTheTargetOfADanglingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.md")
+	link := filepath.Join(dir, "enlace.md")
+	if err := os.Symlink("real.md", link); err != nil { // relative, like most links
+		t.Skipf("no symlinks here: %v", err)
+	}
+
+	e := New()
+	if err := e.Load(link); err != nil {
+		t.Fatal(err)
+	}
+	e.InsertRune('x')
+	if err := e.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlink was replaced: %v, %v", info, err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "x" {
+		t.Errorf("target holds %q, want x", b)
+	}
+}

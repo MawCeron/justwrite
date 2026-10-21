@@ -151,9 +151,7 @@ func (e *Editor) crlfText() string {
 func atomicWrite(path, text string, mode os.FileMode) error {
 	// Rename replaces whatever is at path, so a symlink would be swapped for a
 	// regular file; write through to what it points at instead.
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = resolved
-	}
+	path = followLinks(path)
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
@@ -185,6 +183,24 @@ func atomicWrite(path, text string, mode os.FileMode) error {
 	}
 	syncDir(dir)
 	return nil
+}
+
+// followLinks is the file path ends up at once any symlinks are followed,
+// including one whose target does not exist yet: EvalSymlinks gives up on
+// those, and a save would then replace the link instead of creating the file
+// it points to.
+func followLinks(path string) string {
+	for range 40 { // the same limit the kernel uses before calling it a loop
+		target, err := os.Readlink(path)
+		if err != nil {
+			return path // not a link, or nothing there
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(path), target)
+		}
+		path = target
+	}
+	return path
 }
 
 // syncDir best-effort fsyncs dir so the rename above survives a power loss,
