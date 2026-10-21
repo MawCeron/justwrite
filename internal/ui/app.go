@@ -766,6 +766,7 @@ func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
 		if err := a.ed.Load(a.ed.Path); err != nil {
 			return a, a.failed(err)
 		}
+		a.ed.RemoveSwap() // the edits it held were just discarded
 		return a, a.posted("reloaded")
 	case "o":
 		a.mode = ModeWrite

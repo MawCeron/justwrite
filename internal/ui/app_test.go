@@ -1233,3 +1233,25 @@ func TestOpenDialogHidesBinariesOnceSniffed(t *testing.T) {
 		t.Errorf("imagen.png still listed after the sniff: %s", got)
 	}
 }
+
+// Reloading throws the local edits away, and their autosaved copy with them:
+// left on disk it would be offered for recovery after the next crash.
+func TestConflictReloadRemovesTheSwap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := touchExternally(t, testApp(t), path, "changed elsewhere")
+	a = typeRunes(a, " editado")
+	if err := a.ed.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	a, _ = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+
+	swap := filepath.Join(filepath.Dir(path), ".nota.md.swp")
+	if _, err := os.Stat(swap); err == nil {
+		t.Error("the discarded edits' swap is still on disk")
+	}
+}
