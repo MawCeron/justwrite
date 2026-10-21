@@ -278,6 +278,7 @@ func (e *Editor) PendingSwap() (content string, ok bool) {
 func (e *Editor) RecoverSwap(content string) {
 	e.SetText(content)
 	e.Modified = true
+	e.saved = unsaved // no undo depth is the recovered text's, only a real save
 	e.refreshLoadedStat()
 }
 

@@ -14,6 +14,10 @@ import (
 // throughout — never byte indexes — so a cursor never lands mid-character.
 const noSel = -1
 
+// unsaved is a saved sequence no edit ever reaches, for a buffer whose content
+// is on no disk at all — undoing back to depth zero is not a return to it.
+const unsaved = -1
+
 // noGoal marks "no remembered column" in goalCol.
 const noGoal = -1
 

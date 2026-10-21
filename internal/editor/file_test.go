@@ -673,3 +673,35 @@ func TestRecoverSwapReplacesTheBufferAsModified(t *testing.T) {
 		t.Errorf("Save right after recovering: %v", err)
 	}
 }
+
+// Recovered text differs from the disk however many edits are undone: undoing
+// back to the empty history is the recovered buffer, not the saved file.
+// Letting that read as unmodified skipped the quit prompt and then deleted the
+// swap, the only remaining copy.
+func TestUndoingBackToTheRecoveredTextStaysModified(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("en disco"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	e.RecoverSwap("recuperado")
+
+	e.InsertRune('x')
+	e.Undo()
+
+	if e.Text() != "recuperado" {
+		t.Fatalf("Text() = %q after the undo", e.Text())
+	}
+	if !e.Modified {
+		t.Error("the recovered text is not on disk, but the document reads as saved")
+	}
+	if err := e.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if e.Modified {
+		t.Error("a real save must still clear the marker")
+	}
+}
