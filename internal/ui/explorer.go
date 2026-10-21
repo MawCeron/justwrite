@@ -116,7 +116,6 @@ func (e *explorer) sniff() tea.Cmd {
 
 // markBinary applies a sniff result to the listing, unless it has moved on
 // since: another directory, or the recent list, which has no binaries to hide.
-// The cursor stays on the entry it was on, however many rows vanish above it.
 func (e *explorer) markBinary(s sniffed) {
 	if s.dir != e.dir || e.recent {
 		return
@@ -126,18 +125,7 @@ func (e *explorer) markBinary(s sniffed) {
 			e.all[i].noise = true
 		}
 	}
-	sel, ok := e.selected()
 	e.apply()
-	if !ok {
-		return
-	}
-	for i, it := range e.shown {
-		if it.path == sel.path {
-			e.cursor = i
-			e.offset = clamp(e.offset, max(i-1, 0), i)
-			return
-		}
-	}
 }
 
 // refreshRecent swaps the listing for entries, most recently opened first.
