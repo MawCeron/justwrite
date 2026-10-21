@@ -17,6 +17,15 @@ and this project uses [Semantic Versioning](https://semver.org/).
   column.
 - The open dialog appears before justwrite has looked inside the files to hide
   the binary ones, so a slow disk or network share no longer freezes it.
+- Recovering autosaved text no longer reads as saved after an undo, which
+  skipped the quit prompt and then deleted the only copy.
+- A file that is not valid UTF-8 is refused instead of being opened and
+  rewritten with replacement characters on save.
+- Pasted text has its line endings normalised, as a loaded file does.
+- Saving under a new name removes the old name's autosave copy, and reloading
+  from the conflict panel removes the discarded edits' copy.
+- Saving a document opened through a symlink writes to its target and keeps the
+  link.
 - Long documents wrap once per change instead of several times per keystroke.
 - Literal tabs in a loaded file are drawn as spaces to the next tab stop
   instead of spilling past the page. The file itself is not changed.
