@@ -202,6 +202,30 @@ func TestSniffHidesBinariesAfterTheListingIsUp(t *testing.T) {
 	}
 }
 
+// On a slow disk the result arrives after the user has already moved, and rows
+// vanish above the cursor. Enter must still open the file that was highlighted.
+func TestSniffResultKeepsTheCursorOnItsEntry(t *testing.T) {
+	dir := sampleDir(t)
+	e := explorer{dir: dir}
+	for _, name := range []string{"a.png", "b.png", "notas.md", "z.md"} {
+		e.all = append(e.all, entry{name: name, path: filepath.Join(dir, name)})
+	}
+	e.apply()
+	e.focusOn("notas.md")
+	if it, _ := e.selected(); it.name != "notas.md" || e.cursor != 2 {
+		t.Fatalf("setup: cursor on %q at %d", it.name, e.cursor)
+	}
+
+	e.markBinary(sniffed{dir: dir, binary: map[string]bool{
+		filepath.Join(dir, "a.png"): true,
+		filepath.Join(dir, "b.png"): true,
+	}})
+
+	if it, _ := e.selected(); it.name != "notas.md" {
+		t.Errorf("cursor moved to %q, want it to stay on notas.md", it.name)
+	}
+}
+
 // A result for a directory the user has already left must not touch the
 // listing now on screen.
 func TestSniffResultForAnotherDirectoryIsIgnored(t *testing.T) {
