@@ -297,7 +297,9 @@ func (e *Editor) PendingSwap() (content string, ok bool) {
 // else it resets; the file on disk has not changed, so it is restored right
 // after rather than left to misreport an external change on the next save.
 func (e *Editor) RecoverSwap(content string) {
+	crlf := e.crlf // the document's own line endings; the swap was normalised
 	e.SetText(content)
+	e.crlf = crlf
 	e.Modified = true
 	e.saved = unsaved // no undo depth is the recovered text's, only a real save
 	e.refreshLoadedStat()

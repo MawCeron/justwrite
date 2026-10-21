@@ -808,3 +808,40 @@ func TestSaveWritesThroughASymlink(t *testing.T) {
 		t.Errorf("target holds %q, want unox", b)
 	}
 }
+
+// The swap is normalised to LF on its way back in, so the recovered buffer has
+// to keep the line endings the document was loaded with, or the next save
+// rewrites every line of a CRLF file.
+func TestRecoverSwapKeepsCRLF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nota.md")
+	if err := os.WriteFile(path, []byte("uno\r\ndos"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := New()
+	if err := e.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	e.InsertRune('x')
+	if err := e.WriteSwap(); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Hour)
+	os.Chtimes(swapFor(path), later, later) // newer than the document, so it is pending
+
+	fresh := New()
+	if err := fresh.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	content, ok := fresh.PendingSwap()
+	if !ok {
+		t.Fatal("no pending swap")
+	}
+	fresh.RecoverSwap(content)
+	if err := fresh.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	if b, _ := os.ReadFile(path); string(b) != "uno\r\ndosx" {
+		t.Errorf("file = %q, want CRLF kept", b)
+	}
+}
