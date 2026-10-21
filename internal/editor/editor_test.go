@@ -594,3 +594,24 @@ func TestPasteDropsControlCharacters(t *testing.T) {
 		t.Errorf("buffer = %q, want %q", got, want)
 	}
 }
+
+// ctrl+a moves the cursor to the end of the document, and nothing in the move
+// said so to the goal column: the next Up went to the column the run before it
+// was heading for instead of to the one the cursor is actually in.
+func TestSelectAllEndsTheGoalColumnRun(t *testing.T) {
+	e := New()
+	e.SetText("una linea bastante larga\nla\ncorta")
+	vlines := e.VisualLines(100)
+	e.cursor = 20
+
+	e.MoveDown(vlines, false) // onto "la", goal 20
+	e.SelectAll()             // cursor at the end of "corta", column 5
+	e.MoveUp(vlines, false)
+
+	// "la" has two columns; going to 5 is clamped to 2, going to 20 would be too.
+	// The line above is where they differ.
+	e.MoveUp(vlines, false)
+	if col := e.cursor - vlines[0].Start; col != 5 {
+		t.Errorf("column %d after select all and two moves up, want 5 (where select all left the cursor)", col)
+	}
+}

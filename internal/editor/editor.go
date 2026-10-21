@@ -45,6 +45,11 @@ type Editor struct {
 	// longer line above or below it was. noGoal until the first vertical
 	// move, and invalidated by anything that is not one.
 	goalCol int
+	// goalAt and goalLen are where the cursor and how long the buffer were when
+	// the last vertical move finished. The goal only holds while both still
+	// are: anything that moved the cursor or edited the text since has made it
+	// belong to a column that is no longer the one being left.
+	goalAt, goalLen int
 
 	Path     string // "" until the document has been saved somewhere
 	Modified bool
@@ -188,7 +193,6 @@ func (e *Editor) Copy() string {
 }
 
 func (e *Editor) Cut() string {
-	e.goalCol = noGoal
 	e.CommitPending()
 	start, end, ok := e.Selection()
 	if !ok {
@@ -217,7 +221,6 @@ func printable(r rune) rune {
 // Paste inserts external text when there is any — a bracketed paste from the
 // terminal — and otherwise falls back to what was last copied inside justwrite.
 func (e *Editor) Paste(external string) {
-	e.goalCol = noGoal
 	e.CommitPending()
 	text := external
 	if text == "" {
@@ -270,7 +273,6 @@ func (e *Editor) CommitPending() {
 }
 
 func (e *Editor) Undo() {
-	e.goalCol = noGoal
 	e.CommitPending()
 	if len(e.undo) == 0 {
 		return
@@ -282,7 +284,6 @@ func (e *Editor) Undo() {
 }
 
 func (e *Editor) Redo() {
-	e.goalCol = noGoal
 	e.CommitPending()
 	if len(e.redo) == 0 {
 		return
@@ -316,7 +317,6 @@ func (e *Editor) apply(op editOp, reverse bool) {
 // ─── Editing ─────────────────────────────────────────────────────────────────
 
 func (e *Editor) InsertRune(r rune) {
-	e.goalCol = noGoal
 	e.replaceSelection()
 
 	// A newline is always its own undo step, and a space closes the word
@@ -346,7 +346,6 @@ func (e *Editor) InsertRune(r rune) {
 
 // InsertString inserts text as a single undo step — a tab, or a paste.
 func (e *Editor) InsertString(s string) {
-	e.goalCol = noGoal
 	e.CommitPending()
 	e.replaceSelection()
 	e.insertAsOneOp(s)
@@ -368,7 +367,6 @@ func (e *Editor) insertAsOneOp(s string) {
 // same as typing does — deleting five characters after typing "hola mundo"
 // used to take seven undos to reach an empty document instead of two.
 func (e *Editor) Backspace() {
-	e.goalCol = noGoal
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()
 		return
@@ -392,7 +390,6 @@ func (e *Editor) Backspace() {
 }
 
 func (e *Editor) DeleteForward() {
-	e.goalCol = noGoal
 	e.CommitPending()
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()
@@ -430,13 +427,20 @@ func (e *Editor) beforeMove(extend, vertical bool) {
 // current column when this is the first of the run — which becomes the goal
 // for whatever comes after it.
 //
-// Anything that edits the buffer drops the goal too, same as a horizontal
-// move: the column the user was heading for belongs to text that has changed.
+// Anything else that moves the cursor or edits the buffer ends the run too,
+// whether or not it remembers to say so: see goalAt.
 func (e *Editor) verticalCol(cur int, vlines []VisualLine) int {
-	if e.goalCol == noGoal {
+	if e.goalCol == noGoal || e.cursor != e.goalAt || len(e.buf) != e.goalLen {
 		e.goalCol = e.cursor - vlines[cur].Start
 	}
 	return e.goalCol
+}
+
+// landVertically puts the cursor at pos, the end of a vertical move, and notes
+// where, so the next one can tell it is still part of the same run.
+func (e *Editor) landVertically(pos int) {
+	e.cursor = pos
+	e.goalAt, e.goalLen = pos, len(e.buf)
 }
 
 func (e *Editor) MoveLeft(extend bool) {
@@ -459,7 +463,7 @@ func (e *Editor) MoveUp(vlines []VisualLine, extend bool) {
 	if cur == 0 || len(vlines) == 0 {
 		return
 	}
-	e.cursor = columnIn(vlines[cur-1], e.verticalCol(cur, vlines))
+	e.landVertically(columnIn(vlines[cur-1], e.verticalCol(cur, vlines)))
 }
 
 func (e *Editor) MoveDown(vlines []VisualLine, extend bool) {
@@ -468,7 +472,7 @@ func (e *Editor) MoveDown(vlines []VisualLine, extend bool) {
 	if cur+1 >= len(vlines) {
 		return
 	}
-	e.cursor = columnIn(vlines[cur+1], e.verticalCol(cur, vlines))
+	e.landVertically(columnIn(vlines[cur+1], e.verticalCol(cur, vlines)))
 }
 
 func (e *Editor) Home(vlines []VisualLine, extend bool) {
@@ -507,7 +511,7 @@ func (e *Editor) PageUp(vlines []VisualLine, page int, extend bool) {
 	}
 	cur := e.CursorVisualLine(vlines)
 	col := e.verticalCol(cur, vlines)
-	e.cursor = columnIn(vlines[max(cur-page, 0)], col)
+	e.landVertically(columnIn(vlines[max(cur-page, 0)], col))
 }
 
 func (e *Editor) PageDown(vlines []VisualLine, page int, extend bool) {
@@ -517,7 +521,7 @@ func (e *Editor) PageDown(vlines []VisualLine, page int, extend bool) {
 	}
 	cur := e.CursorVisualLine(vlines)
 	col := e.verticalCol(cur, vlines)
-	e.cursor = columnIn(vlines[min(cur+page, len(vlines)-1)], col)
+	e.landVertically(columnIn(vlines[min(cur+page, len(vlines)-1)], col))
 }
 
 // columnIn keeps the wanted column when it fits, and clamps to the end of a
@@ -562,7 +566,6 @@ func (e *Editor) WordRight(extend bool) {
 // nothing to bind it to. A live selection is deleted instead of consulting
 // the word boundary, matching Backspace and DeleteForward.
 func (e *Editor) DeleteWordLeft() {
-	e.goalCol = noGoal
 	e.CommitPending()
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()
