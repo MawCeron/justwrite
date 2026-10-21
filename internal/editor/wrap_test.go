@@ -177,3 +177,43 @@ func TestVisualLinesExpandsTabs(t *testing.T) {
 		})
 	}
 }
+
+// A grapheme cluster is one thing on screen however many runes it takes: a
+// ZWJ family is five runes and two cells, a flag two runes and two cells.
+// Measuring per rune summed them (six and four), wrapped far too early, and
+// could break a row in the middle of one.
+func TestVisualLinesMeasuresGraphemeClusters(t *testing.T) {
+	const family = "👨‍👩‍👧"
+	const flag = "🇲🇽"
+
+	for _, c := range []struct {
+		name  string
+		text  string
+		width int
+		want  []string
+	}{
+		{"a ZWJ sequence is two cells", family + family + family, 4, []string{family + family, family}},
+		{"a flag is two cells", flag + flag + flag, 4, []string{flag + flag, flag}},
+		{"a cluster wider than the page keeps all its runes", family + "a", 1, []string{family, "a"}},
+		{"a tab after a cluster still runs to the stop", flag + "\tb", 8, []string{flag + "\tb"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := New()
+			e.SetText(c.text)
+
+			got := rows(e, c.width)
+
+			if strings.Join(got, "|") != strings.Join(c.want, "|") {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestRowWidths(t *testing.T) {
+	got := RowWidths([]rune("a\tb👨‍👩‍👧é\t"))
+	want := []int{1, 3, 1, 2, 0, 0, 0, 0, 1, 0, 4}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("RowWidths = %v, want %v", got, want)
+	}
+}

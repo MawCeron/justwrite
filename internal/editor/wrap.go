@@ -1,6 +1,11 @@
 package editor
 
-import "github.com/charmbracelet/x/ansi"
+import (
+	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
+)
 
 // VisualLine is one rendered row: the slice of the document that lands on it.
 // Wrapping is soft, so a logical line becomes several VisualLines without any
@@ -17,18 +22,37 @@ const scrollMargin = 3
 // TabStop is the width of a tab stop, and of what the Tab key inserts.
 const TabStop = 4
 
-// CellWidth is how many terminal cells r occupies when it lands at column col
-// of its row: a tab runs to the next tab stop, CJK and emoji take two, a
-// combining mark none, and everything else one. The document keeps its tab
-// bytes; only the page expands them.
-//
-// ponytail: per rune, so a multi-rune emoji (ZWJ sequence, flag) counts as the
-// sum of its parts; measure by grapheme cluster if those ever matter.
-func CellWidth(r rune, col int) int {
-	if r == '\t' {
-		return TabStop - col%TabStop
+// tabWidth is how far a tab at column col runs, to the next tab stop.
+func tabWidth(col int) int { return TabStop - col%TabStop }
+
+// clusterWidths is the cells each rune of rs takes, measured by grapheme
+// cluster: the cluster's whole width lands on its first rune and the rest take
+// none, so a ZWJ emoji or a flag is two cells rather than the sum of its parts,
+// and a row can never break inside one. A tab reports zero; it needs the
+// column it lands on, which only the row knows.
+func clusterWidths(rs []rune) []int {
+	widths := make([]int, len(rs))
+	for s, i := string(rs), 0; s != ""; {
+		var cluster string
+		cluster, s, _, _ = uniseg.FirstGraphemeClusterInString(s, -1)
+		widths[i] = ansi.StringWidth(cluster)
+		i += utf8.RuneCountInString(cluster)
 	}
-	return ansi.StringWidth(string(r))
+	return widths
+}
+
+// RowWidths is the cells each rune of one rendered row takes. The document
+// keeps its tab bytes; only the page expands them, each to the next tab stop
+// counted from the start of the row.
+func RowWidths(row []rune) []int {
+	widths := clusterWidths(row)
+	for col, i := 0, 0; i < len(row); i++ {
+		if row[i] == '\t' {
+			widths[i] = tabWidth(col)
+		}
+		col += widths[i]
+	}
+	return widths
 }
 
 // VisualLines breaks the document into rows of at most width cells, breaking
@@ -62,11 +86,16 @@ func (e *Editor) VisualLines(width int) []VisualLine {
 			}
 		}
 
+		base := clusterWidths(e.buf[pos:logicalEnd])
 		for segStart := pos; ; {
 			// over is the first rune that no longer fits on this row.
 			over, cells := segStart, 0
 			for over < logicalEnd {
-				cells += CellWidth(e.buf[over], cells)
+				if e.buf[over] == '\t' {
+					cells += tabWidth(cells)
+				} else {
+					cells += base[over-pos]
+				}
 				if cells > width {
 					break
 				}
@@ -76,7 +105,13 @@ func (e *Editor) VisualLines(width int) []VisualLine {
 				lines = append(lines, VisualLine{segStart, logicalEnd})
 				break
 			}
-			wrapAt := max(over-segStart, 1) // a rune wider than the page still takes a row
+			wrapAt := over - segStart
+			if wrapAt == 0 {
+				// A cluster wider than the whole page still takes a row of its
+				// own, all of it.
+				for wrapAt = 1; segStart+wrapAt < logicalEnd && base[segStart+wrapAt-pos] == 0 && e.buf[segStart+wrapAt] != '\t'; wrapAt++ {
+				}
+			}
 			for i := over - 1; i >= segStart; i-- {
 				if e.buf[i] == ' ' {
 					wrapAt = i - segStart + 1 // the space stays on this row

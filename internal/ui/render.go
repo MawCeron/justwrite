@@ -130,16 +130,15 @@ func (a App) renderLine(vl editor.VisualLine, isCursorRow bool) string {
 		}
 	}
 
-	col := 0
+	widths := editor.RowWidths(buf[vl.Start:vl.End])
 	for i := vl.Start; i <= vl.End; i++ {
 		text := " "
 		switch {
 		case i < vl.End:
 			text = string(buf[i])
 			if buf[i] == '\t' {
-				text = strings.Repeat(" ", editor.CellWidth('\t', col))
+				text = strings.Repeat(" ", widths[i-vl.Start])
 			}
-			col += editor.CellWidth(buf[i], col)
 		case i != cursor:
 			// Past the end of the row, with no cursor to park here.
 			flush()
