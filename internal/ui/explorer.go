@@ -40,7 +40,8 @@ type explorer struct {
 	total   int  // entries before the filter, for the counter
 }
 
-// refresh reads dir. focus is the name to put the cursor on, which is how
+// refresh reads dir, without opening any file in it: the caller sends sniff's
+// command to hide the binary ones. focus is the name to put the cursor on, which is how
 // stepping up to the parent lands on the directory you just came out of
 // instead of dumping you at the top of the list.
 func (e *explorer) refresh(dir, focus string) {
@@ -66,9 +67,8 @@ func (e *explorer) refresh(dir, focus string) {
 			dirs = append(dirs, entry{name: it.Name() + "/", path: p, isDir: true, noise: hidden})
 			continue
 		}
-		// ponytail: binary sniffing reads every file once per directory, on the
-		// UI thread. Move it into a tea.Cmd if a network share ever stalls here.
-		files = append(files, entry{name: it.Name(), path: p, noise: hidden || editor.IsBinary(p)})
+		// Binary files are hidden once sniff reports back; until then they list.
+		files = append(files, entry{name: it.Name(), path: p, noise: hidden})
 	}
 
 	byName := func(s []entry) {

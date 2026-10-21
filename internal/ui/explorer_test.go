@@ -42,6 +42,7 @@ func names(e *explorer) []string {
 func TestNoiseIsHiddenUntilAskedFor(t *testing.T) {
 	var e explorer
 	e.refresh(sampleDir(t), "")
+	e.markBinary(e.sniff()().(sniffed))
 
 	got := strings.Join(names(&e), " ")
 	for _, unwanted := range []string{".oculto", "imagen.png"} {

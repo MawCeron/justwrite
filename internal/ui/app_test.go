@@ -1214,3 +1214,22 @@ func TestPageExpandsTabs(t *testing.T) {
 		t.Errorf("rendering changed the document to %q", got)
 	}
 }
+
+// Opening the dialog lists the directory straight away and hides the binary
+// files when the sniff command reports back through Update.
+func TestOpenDialogHidesBinariesOnceSniffed(t *testing.T) {
+	a := testApp(t)
+	a.ed.Path = filepath.Join(sampleDir(t), "alpha.md")
+
+	cmd := a.openDialog()
+	if !strings.Contains(strings.Join(names(&a.exp), " "), "imagen.png") {
+		t.Fatalf("the listing should be up before the sniff runs: %v", names(&a.exp))
+	}
+
+	next, _ := a.Update(cmd())
+	a = next.(App)
+
+	if got := strings.Join(names(&a.exp), " "); strings.Contains(got, "imagen.png") {
+		t.Errorf("imagen.png still listed after the sniff: %s", got)
+	}
+}

@@ -217,6 +217,9 @@ func (a App) update(msg tea.Msg) (App, tea.Cmd) {
 			return a, tea.Tick(cursorBlinkSpeed, func(time.Time) tea.Msg { return msg })
 		}
 
+	case sniffed:
+		a.exp.markBinary(msg)
+
 	case autosaveTick:
 		if a.ed.Path != "" && a.ed.Modified {
 			a.ed.WriteSwap()
@@ -547,11 +550,12 @@ func (a App) startDir() string {
 func (a *App) openDialog() tea.Cmd {
 	a.exp.refresh(a.startDir(), "")
 	a.mode = ModeOpen
-	return nil
+	return a.exp.sniff()
 }
 
 func (a *App) saveAsDialog() tea.Cmd {
 	a.exp.refresh(a.startDir(), "")
+	sniff := a.exp.sniff()
 	suggested := ""
 	if a.ed.Path != "" {
 		suggested = filepath.Base(a.ed.Path)
@@ -560,7 +564,7 @@ func (a *App) saveAsDialog() tea.Cmd {
 	a.name.CursorEnd()
 	a.onName = true // you pressed save to name the thing, so start in the field
 	a.mode = ModeSaveAs
-	return a.name.Focus()
+	return tea.Batch(a.name.Focus(), sniff)
 }
 
 // openFind starts a search, remembering where the cursor was so esc can put
@@ -575,6 +579,7 @@ func (a *App) openFind() tea.Cmd {
 }
 
 func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg.String() {
 	case "esc":
 		// Esc backs out one step at a time: the filter, then recent, then
@@ -584,6 +589,7 @@ func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
 			a.exp.setFilter("")
 		case a.exp.recent:
 			a.exp.refresh(a.exp.dir, "")
+			cmd = a.exp.sniff()
 		default:
 			a.mode = ModeWrite
 		}
@@ -592,13 +598,14 @@ func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "ctrl+r":
 		if a.exp.recent {
 			a.exp.refresh(a.exp.dir, "")
+			cmd = a.exp.sniff()
 		} else {
 			a.exp.refreshRecent(recentEntries(a.st))
 		}
 	default:
 		a.browse(msg)
 	}
-	return a, nil
+	return a, cmd
 }
 
 func (a App) keySaveAs(msg tea.KeyMsg) (App, tea.Cmd) {
@@ -671,7 +678,7 @@ func (a App) enterSelection(naming bool) (App, tea.Cmd) {
 			focus = filepath.Base(a.exp.dir) // land on the directory just left
 		}
 		a.exp.refresh(it.path, focus)
-		return a, nil
+		return a, a.exp.sniff()
 	}
 
 	if naming {
