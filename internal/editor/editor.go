@@ -178,6 +178,7 @@ func (e *Editor) Copy() string {
 }
 
 func (e *Editor) Cut() string {
+	e.goalCol = noGoal
 	e.CommitPending()
 	start, end, ok := e.Selection()
 	if !ok {
@@ -196,6 +197,7 @@ func (e *Editor) Cut() string {
 // Paste inserts external text when there is any — a bracketed paste from the
 // terminal — and otherwise falls back to what was last copied inside justwrite.
 func (e *Editor) Paste(external string) {
+	e.goalCol = noGoal
 	e.CommitPending()
 	text := external
 	if text == "" {
@@ -246,6 +248,7 @@ func (e *Editor) CommitPending() {
 }
 
 func (e *Editor) Undo() {
+	e.goalCol = noGoal
 	e.CommitPending()
 	if len(e.undo) == 0 {
 		return
@@ -257,6 +260,7 @@ func (e *Editor) Undo() {
 }
 
 func (e *Editor) Redo() {
+	e.goalCol = noGoal
 	e.CommitPending()
 	if len(e.redo) == 0 {
 		return
@@ -290,6 +294,7 @@ func (e *Editor) apply(op editOp, reverse bool) {
 // ─── Editing ─────────────────────────────────────────────────────────────────
 
 func (e *Editor) InsertRune(r rune) {
+	e.goalCol = noGoal
 	e.replaceSelection()
 
 	// A newline is always its own undo step, and a space closes the word
@@ -319,6 +324,7 @@ func (e *Editor) InsertRune(r rune) {
 
 // InsertString inserts text as a single undo step — a tab, or a paste.
 func (e *Editor) InsertString(s string) {
+	e.goalCol = noGoal
 	e.CommitPending()
 	e.replaceSelection()
 	e.insertAsOneOp(s)
@@ -340,6 +346,7 @@ func (e *Editor) insertAsOneOp(s string) {
 // same as typing does — deleting five characters after typing "hola mundo"
 // used to take seven undos to reach an empty document instead of two.
 func (e *Editor) Backspace() {
+	e.goalCol = noGoal
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()
 		return
@@ -363,6 +370,7 @@ func (e *Editor) Backspace() {
 }
 
 func (e *Editor) DeleteForward() {
+	e.goalCol = noGoal
 	e.CommitPending()
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()
@@ -400,11 +408,8 @@ func (e *Editor) beforeMove(extend, vertical bool) {
 // current column when this is the first of the run — which becomes the goal
 // for whatever comes after it.
 //
-// ponytail: only moves routed through beforeMove invalidate the goal; typing
-// or deleting through a short line does not. Narrow sequence to hit (move
-// vertically, edit, move vertically again with nothing else in between) —
-// clear goalCol at the top of the editing entry points too if that turns out
-// to matter in practice.
+// Anything that edits the buffer drops the goal too, same as a horizontal
+// move: the column the user was heading for belongs to text that has changed.
 func (e *Editor) verticalCol(cur int, vlines []VisualLine) int {
 	if e.goalCol == noGoal {
 		e.goalCol = e.cursor - vlines[cur].Start
@@ -535,6 +540,7 @@ func (e *Editor) WordRight(extend bool) {
 // nothing to bind it to. A live selection is deleted instead of consulting
 // the word boundary, matching Backspace and DeleteForward.
 func (e *Editor) DeleteWordLeft() {
+	e.goalCol = noGoal
 	e.CommitPending()
 	if _, _, ok := e.Selection(); ok {
 		e.replaceSelection()

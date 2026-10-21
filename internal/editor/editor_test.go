@@ -521,3 +521,33 @@ func TestSetCursorClampsAndClearsSelection(t *testing.T) {
 		t.Errorf("Cursor() = %d, want %d (clamped)", e.Cursor(), want)
 	}
 }
+
+// Editing is as much a break in the run of vertical moves as a horizontal
+// move is: the goal column belongs to the text the user was moving through,
+// and after typing or deleting on the short line it no longer does.
+func TestEditingForgetsTheGoalColumn(t *testing.T) {
+	for name, edit := range map[string]func(e *Editor){
+		"backspace":  func(e *Editor) { e.Backspace() },
+		"typing":     func(e *Editor) { e.InsertRune('x') },
+		"paste":      func(e *Editor) { e.Paste("x") },
+		"word":       func(e *Editor) { e.DeleteWordLeft() },
+		"forwarddel": func(e *Editor) { e.DeleteForward() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := New()
+			e.SetText("una linea bastante larga\nla\nuna linea bastante larga tambien\nuna ultima linea larga tambien")
+			e.cursor = 18
+
+			e.MoveDown(e.VisualLines(100), false) // onto the short line, goal 18
+			edit(e)
+
+			vlines := e.VisualLines(100)
+			row := e.CursorVisualLine(vlines)
+			want := e.cursor - vlines[row].Start
+			e.MoveDown(vlines, false)
+			if col := e.cursor - vlines[row+1].Start; col != want {
+				t.Errorf("column %d after the edit, want %d: the old goal 18 survived", col, want)
+			}
+		})
+	}
+}
