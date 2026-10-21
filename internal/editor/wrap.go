@@ -32,6 +32,9 @@ func tabWidth(col int) int { return TabStop - col%TabStop }
 // column it lands on, which only the row knows.
 func clusterWidths(rs []rune) []int {
 	widths := make([]int, len(rs))
+	if plainWidths(rs, widths) {
+		return widths
+	}
 	for s, i := string(rs), 0; s != ""; {
 		var cluster string
 		cluster, s, _, _ = uniseg.FirstGraphemeClusterInString(s, -1)
@@ -39,6 +42,25 @@ func clusterWidths(rs []rune) []int {
 		i += utf8.RuneCountInString(cluster)
 	}
 	return widths
+}
+
+// plainWidths fills widths for text that is nothing but printable ASCII,
+// Latin-1 and Latin Extended letters (below the combining marks, which start
+// at U+0300) and tabs: every rune there is one cell and its own cluster, so
+// segmenting is wasted work for the prose that makes up nearly every line. It
+// reports false, leaving widths for the general path, on anything else.
+func plainWidths(rs []rune, widths []int) bool {
+	for i, r := range rs {
+		switch {
+		case r == '\t':
+			// zero, like the general path: the row knows the column
+		case r >= 0x20 && r < 0x7f, r >= 0xa1 && r < 0x300 && r != 0xad: // 0xad, the soft hyphen, is zero-width
+			widths[i] = 1
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // RowWidths is the cells each rune of one rendered row takes. The document

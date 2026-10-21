@@ -217,3 +217,30 @@ func TestRowWidths(t *testing.T) {
 		t.Errorf("RowWidths = %v, want %v", got, want)
 	}
 }
+
+// A novel's worth of Spanish prose in paragraphs of a few hundred runes, with
+// one line of CJK among them, wrapped on every keystroke.
+func BenchmarkVisualLines(b *testing.B) {
+	para := strings.Repeat("Había una vez un párrafo que se repite hasta el cansancio, con acentos y ñ. ", 5)
+	e := New()
+	e.SetText(strings.Repeat(para+"\n", 800) + "你好世界你好世界\n" + strings.Repeat(para+"\n", 800))
+	b.ResetTimer()
+	for range b.N {
+		e.VisualLines(72)
+	}
+}
+
+// plainWidths skips the segmenter for the runes it claims; it may only claim
+// the ones the segmenter would call one cell, and none that can start or join
+// a cluster.
+func TestPlainWidthsAgreeWithTheGeneralMeasure(t *testing.T) {
+	for r := rune(0); r < 0x300; r++ {
+		widths := make([]int, 1)
+		if !plainWidths([]rune{r}, widths) || r == '\t' {
+			continue
+		}
+		if want := ansi.StringWidth(string(r)); widths[0] != want {
+			t.Errorf("U+%04X: fast path says %d cells, general measure says %d", r, widths[0], want)
+		}
+	}
+}
