@@ -244,3 +244,27 @@ func TestPlainWidthsAgreeWithTheGeneralMeasure(t *testing.T) {
 		}
 	}
 }
+
+// The cache is keyed on the text itself, so any edit has to show up in the
+// next answer — including one that leaves the length and the width alone.
+func TestVisualLinesCacheSeesEveryEdit(t *testing.T) {
+	e := New()
+	e.SetText("uno dos tres")
+	if got := rows(e, 7); strings.Join(got, "|") != "uno |dos |tres" {
+		t.Fatalf("before the edit: %q", got)
+	}
+
+	e.SetCursor(3)
+	e.DeleteForward() // "unodos tres": same width, different rows
+	if got := rows(e, 7); strings.Join(got, "|") != "unodos |tres" {
+		t.Errorf("after deleting: %q", got)
+	}
+
+	e.SetText("unodos tres") // equal text, new document: still right
+	if got := rows(e, 7); strings.Join(got, "|") != "unodos |tres" {
+		t.Errorf("after reloading: %q", got)
+	}
+	if got := rows(e, 20); strings.Join(got, "|") != "unodos tres" {
+		t.Errorf("at another width: %q", got)
+	}
+}

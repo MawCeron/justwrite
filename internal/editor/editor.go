@@ -53,6 +53,12 @@ type Editor struct {
 
 	clipboard string
 
+	// wrapped is VisualLines' last answer, valid for exactly the text in
+	// wrappedBuf at wrappedWidth.
+	wrapped      []VisualLine
+	wrappedBuf   []rune
+	wrappedWidth int
+
 	undo  []editOp
 	redo  []editOp
 	seq   int // next sequence number to hand out to a new edit

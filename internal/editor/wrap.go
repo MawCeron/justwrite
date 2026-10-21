@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"slices"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
@@ -83,12 +84,24 @@ func RowWidths(row []rune) []int {
 // It always returns at least one line: an empty document still has a row for
 // the cursor to sit on, and every caller indexes the result.
 //
-// ponytail: O(buffer) and recomputed per frame; cache per logical line if a
-// long document ever feels slow.
+// The answer is cached against the exact text and width it was computed for,
+// so the several calls a keystroke makes — scrolling, the key handler, the
+// render — wrap the document once, and moving the cursor wraps it not at all.
+// The slice is shared: callers must not modify it.
 func (e *Editor) VisualLines(width int) []VisualLine {
 	if width < 1 {
 		width = 1
 	}
+	if e.wrapped != nil && e.wrappedWidth == width && slices.Equal(e.wrappedBuf, e.buf) {
+		return e.wrapped
+	}
+	e.wrapped = e.wrap(width)
+	e.wrappedWidth = width
+	e.wrappedBuf = append(e.wrappedBuf[:0], e.buf...)
+	return e.wrapped
+}
+
+func (e *Editor) wrap(width int) []VisualLine {
 	var lines []VisualLine
 	n := len(e.buf)
 
