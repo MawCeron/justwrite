@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ErrNoPath means the document has never been named, so the caller should ask
@@ -22,6 +23,11 @@ var ErrNoPath = errors.New("the document has no filename yet")
 // anyway with ForceSave, or save under a different name.
 var ErrExternalChange = errors.New("the file on disk has changed since it was opened")
 
+// ErrNotUTF8 means the file holds bytes that are not UTF-8 — Latin-1 or
+// Windows-1252 text, say. The buffer is runes, so opening it would turn each
+// such byte into U+FFFD and the next save would write that over the original.
+var ErrNotUTF8 = errors.New("the file is not valid UTF-8, so opening it would corrupt it on save")
+
 // Load reads path into the document. A file that does not exist yet is not an
 // error: the name is kept so ctrl+s saves straight to it, instead of dropping
 // the name and asking again for something the user already typed.
@@ -33,6 +39,8 @@ func (e *Editor) Load(path string) error {
 		e.cursor = 0
 	case err != nil:
 		return err
+	case !utf8.Valid(b):
+		return ErrNotUTF8
 	default:
 		text, crlf := normalizeLineEndings(string(b))
 		e.SetText(text)

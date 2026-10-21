@@ -705,3 +705,27 @@ func TestUndoingBackToTheRecoveredTextStaysModified(t *testing.T) {
 		t.Error("a real save must still clear the marker")
 	}
 }
+
+// A byte that is not UTF-8 cannot survive being a rune: it comes back as
+// U+FFFD, and saving would overwrite the original with the replacement. So
+// the file is refused, and left exactly as it was.
+func TestLoadRefusesAFileThatIsNotUTF8(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "viejo.txt")
+	if err := os.WriteFile(path, []byte("caf\xe9"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New()
+	e.SetText("otro documento")
+	err := e.Load(path)
+
+	if !errors.Is(err, ErrNotUTF8) {
+		t.Fatalf("Load = %v, want ErrNotUTF8", err)
+	}
+	if e.Text() != "otro documento" || e.Path != "" {
+		t.Errorf("a refused load changed the document: %q at %q", e.Text(), e.Path)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "caf\xe9" {
+		t.Errorf("the file on disk is now %q", b)
+	}
+}
