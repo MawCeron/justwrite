@@ -118,13 +118,7 @@ func (e *Editor) wrap(width int) []VisualLine {
 				lines = append(lines, VisualLine{segStart, logicalEnd})
 				break
 			}
-			wrapAt := over - segStart
-			if wrapAt == 0 {
-				// A cluster wider than the whole page still takes a row of its
-				// own, all of it.
-				for wrapAt = 1; segStart+wrapAt < logicalEnd && base[segStart+wrapAt-pos] == 0 && e.buf[segStart+wrapAt] != '\t'; wrapAt++ {
-				}
-			}
+			wrapAt := max(over-segStart, 1) // a rune wider than the page still takes a row
 			for i := over - 1; i >= segStart; i-- {
 				if e.buf[i] == ' ' {
 					wrapAt = i - segStart + 1 // the space stays on this row
@@ -133,9 +127,6 @@ func (e *Editor) wrap(width int) []VisualLine {
 			}
 			lines = append(lines, VisualLine{segStart, segStart + wrapAt})
 			segStart += wrapAt
-			if segStart == logicalEnd {
-				break // that oversized rune was the last one; no empty tail row
-			}
 		}
 
 		if !hasNewline {

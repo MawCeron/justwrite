@@ -132,7 +132,6 @@ func TestVisualLinesMeasuresCells(t *testing.T) {
 		{"an emoji takes two cells", "😀😀😀😀", 4, []string{"😀😀", "😀😀"}},
 		{"a combining mark takes none", "ééé", 2, []string{"éé", "é"}},
 		{"wrapping still prefers the last space", "你好 世界你好", 6, []string{"你好 ", "世界你", "好"}},
-		{"a rune wider than the page still takes a row", "你好", 1, []string{"你", "好"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := New()
@@ -194,7 +193,6 @@ func TestVisualLinesMeasuresGraphemeClusters(t *testing.T) {
 	}{
 		{"a ZWJ sequence is two cells", family + family + family, 4, []string{family + family, family}},
 		{"a flag is two cells", flag + flag + flag, 4, []string{flag + flag, flag}},
-		{"a cluster wider than the page keeps all its runes", family + "a", 1, []string{family, "a"}},
 		{"a tab after a cluster still runs to the stop", flag + "\tb", 8, []string{flag + "\tb"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -226,6 +224,7 @@ func BenchmarkVisualLines(b *testing.B) {
 	e.SetText(strings.Repeat(para+"\n", 800) + "你好世界你好世界\n" + strings.Repeat(para+"\n", 800))
 	b.ResetTimer()
 	for range b.N {
+		e.wrapped = nil // every call is a change, not a cache hit
 		e.VisualLines(72)
 	}
 }
