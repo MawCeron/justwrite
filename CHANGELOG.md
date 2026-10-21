@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The page is measured in terminal cells, not runes: CJK text, emoji and
+  combining marks no longer overflow the page or throw off the cursor, the
+  selection and the centring.
+- Literal tabs in a loaded file are drawn as spaces to the next tab stop
+  instead of spilling past the page. The file itself is not changed.
+
 ## [0.2.0] - 2026-09-15
 
 ### Added
