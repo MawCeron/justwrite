@@ -9,9 +9,15 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- The page is measured in terminal cells, not runes: CJK text, emoji and
-  combining marks no longer overflow the page or throw off the cursor, the
-  selection and the centring.
+- The page is measured in terminal cells, not runes: CJK text, emoji
+  (ZWJ sequences and flags included) and combining marks no longer overflow
+  the page or throw off the cursor, the selection and the centring.
+- Moving up or down remembers its column across a short line only until you
+  edit; typing or deleting there no longer sends the next move to the old
+  column.
+- The open dialog appears before justwrite has looked inside the files to hide
+  the binary ones, so a slow disk or network share no longer freezes it.
+- Long documents wrap once per change instead of several times per keystroke.
 - Literal tabs in a loaded file are drawn as spaces to the next tab stop
   instead of spilling past the page. The file itself is not changed.
 
