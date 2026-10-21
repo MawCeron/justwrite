@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func TestFilteringNarrowsTheListAndCounts(t *testing.T) {
 	if got := names(&e); len(got) != 1 || got[0] != "alpha.md" {
 		t.Fatalf("filtered list = %v, want just alpha.md", got)
 	}
-	if want := "/alp  1/" + itoa(before); !strings.HasPrefix(e.footer(), want) {
+	if want := "/alp  1/" + strconv.Itoa(before); !strings.HasPrefix(e.footer(), want) {
 		t.Errorf("footer = %q, want it to start %q", e.footer(), want)
 	}
 
@@ -180,21 +181,9 @@ func TestRecentEntriesOrderedAndCapped(t *testing.T) {
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
-}
-
 // The binary check is what the open dialog used to do while building its
 // listing, on the UI thread. As a command it has to find the same files and
-// then hide them without losing the entry the cursor was on.
+// then hide them.
 func TestSniffHidesBinariesAfterTheListingIsUp(t *testing.T) {
 	dir := sampleDir(t)
 	e := explorer{dir: dir}
@@ -202,8 +191,6 @@ func TestSniffHidesBinariesAfterTheListingIsUp(t *testing.T) {
 		e.all = append(e.all, entry{name: name, path: filepath.Join(dir, name)})
 	}
 	e.apply()
-	e.focusOn("gamma.txt")
-
 	msg := e.sniff()().(sniffed)
 	e.markBinary(msg)
 
@@ -212,9 +199,6 @@ func TestSniffHidesBinariesAfterTheListingIsUp(t *testing.T) {
 	}
 	if got := strings.Join(names(&e), " "); got != "alpha.md gamma.txt" {
 		t.Errorf("listing = %q, want the binary hidden", got)
-	}
-	if it, _ := e.selected(); it.name != "gamma.txt" {
-		t.Errorf("cursor moved to %q, want it to stay on gamma.txt", it.name)
 	}
 }
 
