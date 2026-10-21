@@ -204,6 +204,16 @@ func (e *Editor) Cut() string {
 	return text
 }
 
+// printable drops control characters other than newline and tab. They reach
+// the terminal unchanged when the page is drawn, so a pasted escape sequence
+// would run there instead of reading as text.
+func printable(r rune) rune {
+	if unicode.IsControl(r) && r != '\n' && r != '\t' {
+		return -1
+	}
+	return r
+}
+
 // Paste inserts external text when there is any — a bracketed paste from the
 // terminal — and otherwise falls back to what was last copied inside justwrite.
 func (e *Editor) Paste(external string) {
@@ -218,6 +228,7 @@ func (e *Editor) Paste(external string) {
 	}
 	e.replaceSelection()
 	text, _ = normalizeLineEndings(text) // a paste's CRLF is not the file's
+	text = strings.Map(printable, text)
 	e.insertAsOneOp(text)
 }
 

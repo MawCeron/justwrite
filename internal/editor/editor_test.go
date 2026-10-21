@@ -581,3 +581,16 @@ func TestPasteNormalisesLineEndings(t *testing.T) {
 		})
 	}
 }
+
+// The page writes the buffer's runes to the terminal as they are, so a control
+// character pasted into the document is a command to the terminal, not text.
+// Typing already refuses them; a paste has to as well, newline and tab aside.
+func TestPasteDropsControlCharacters(t *testing.T) {
+	e := New()
+
+	e.Paste("a\x1b[2Jb\x07c\x00d\te\nf\x7fg")
+
+	if got, want := e.Text(), "a[2Jbcd\te\nfg"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+}
