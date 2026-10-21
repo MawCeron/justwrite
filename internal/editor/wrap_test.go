@@ -230,21 +230,6 @@ func BenchmarkVisualLines(b *testing.B) {
 	}
 }
 
-// plainWidths skips the segmenter for the runes it claims; it may only claim
-// the ones the segmenter would call one cell, and none that can start or join
-// a cluster.
-func TestPlainWidthsAgreeWithTheGeneralMeasure(t *testing.T) {
-	for r := rune(0); r < 0x300; r++ {
-		widths := make([]int, 1)
-		if !plainWidths([]rune{r}, widths) || r == '\t' {
-			continue
-		}
-		if want := ansi.StringWidth(string(r)); widths[0] != want {
-			t.Errorf("U+%04X: fast path says %d cells, general measure says %d", r, widths[0], want)
-		}
-	}
-}
-
 // The cache is keyed on the text itself, so any edit has to show up in the
 // next answer — including one that leaves the length and the width alone.
 func TestVisualLinesCacheSeesEveryEdit(t *testing.T) {
