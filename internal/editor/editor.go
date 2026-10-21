@@ -217,6 +217,7 @@ func (e *Editor) Paste(external string) {
 		return
 	}
 	e.replaceSelection()
+	text, _ = normalizeLineEndings(text) // a paste's CRLF is not the file's
 	e.insertAsOneOp(text)
 }
 

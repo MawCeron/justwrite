@@ -1,6 +1,9 @@
 package editor
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func typeText(e *Editor, s string) {
 	for _, r := range s {
@@ -547,6 +550,33 @@ func TestEditingForgetsTheGoalColumn(t *testing.T) {
 			e.MoveDown(vlines, false)
 			if col := e.cursor - vlines[row+1].Start; col != want {
 				t.Errorf("column %d after the edit, want %d: the old goal 18 survived", col, want)
+			}
+		})
+	}
+}
+
+// Line endings are normalised when a file is loaded, because a CR in the
+// buffer is a printable character that draws wrong and saves back as noise.
+// A paste is the other way text gets in, and a Windows clipboard or a
+// terminal sends it with CR or CRLF.
+func TestPasteNormalisesLineEndings(t *testing.T) {
+	for name, in := range map[string]string{
+		"crlf":      "uno\r\ndos",
+		"lone cr":   "uno\rdos",
+		"clipboard": "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := New()
+			if in == "" {
+				e.SetText("uno\r\ndos")
+				e.SelectAll()
+				e.Copy()
+				e.SetText("")
+			}
+			e.Paste(in)
+
+			if got := e.Text(); strings.ContainsRune(got, '\r') {
+				t.Errorf("buffer holds a CR: %q", got)
 			}
 		})
 	}
