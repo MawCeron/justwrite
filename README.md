@@ -198,6 +198,13 @@ document — the same atomic write a real save uses. A clean save or a clean
 quit removes it; if it is ever still there and newer than the document the
 next time it opens, justwrite offers to recover it.
 
+**Saving follows symlinks.** A document opened through a link is written to
+what the link points at, and the link stays.
+
+**Only UTF-8 files open.** Anything else, such as Latin-1 or Windows-1252, is
+refused with the reason instead of being rewritten with replacement characters
+on the next save.
+
 **Line endings are preserved.** A file that uses CRLF keeps using CRLF;
 everything else is saved as LF. A file that mixes both is saved as CRLF.
 

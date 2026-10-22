@@ -7,43 +7,37 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-22
+
 ### Fixed
 
+- The page is measured in terminal cells and grapheme clusters, not runes: CJK
+  text, emoji (ZWJ sequences and flags included) and combining marks no longer
+  overflow the page or throw off the cursor, the selection and the centring,
+  and a row never starts with a mark cut off from its base.
 - The cursor, selection, Backspace and Delete step over whole grapheme
   clusters, so a combining mark, flag or emoji family is never split.
 - Up and Down keep the cursor's column in cells, not runes, across CJK text
-  and tabs.
-- A document that shrinks to fit the window scrolls back to its first row.
-- The page is measured in terminal cells, not runes: CJK text, emoji
-  (ZWJ sequences and flags included) and combining marks no longer overflow
-  the page or throw off the cursor, the selection and the centring.
-- Moving up or down remembers its column across a short line only until you
-  edit; typing or deleting there no longer sends the next move to the old
-  column.
-- The open dialog appears before justwrite has looked inside the files to hide
-  the binary ones, so a slow disk or network share no longer freezes it.
-- Recovering autosaved text no longer reads as saved after an undo, which
-  skipped the quit prompt and then deleted the only copy.
-- A file that is not valid UTF-8 is refused instead of being opened and
-  rewritten with replacement characters on save.
-- Pasted text has its line endings normalised, as a loaded file does.
-- Saving under a new name removes the old name's autosave copy, and reloading
-  from the conflict panel removes the discarded edits' copy.
-- Saving a document opened through a symlink writes to its target and keeps the
-  link.
-- Recovering autosaved text from a CRLF file keeps its CRLF line endings.
-- Saving through a symlink whose target does not exist yet creates the target
-  and keeps the link.
-- Pasted text has control characters (escape sequences included) removed.
-- A wrapped row no longer starts with a combining mark or joiner cut off from
-  the space before it.
-- Up and down forget their remembered column after select all, and after
-  anything else that moves the cursor.
-- The open dialog keeps its highlight on the same file when binaries above it
-  are hidden after a slow directory read.
-- Long documents wrap once per change instead of several times per keystroke.
+  and tabs, and forget it after any edit, select all, or anything else that
+  moves the cursor.
 - Literal tabs in a loaded file are drawn as spaces to the next tab stop
   instead of spilling past the page. The file itself is not changed.
+- A document that shrinks to fit the window scrolls back to its first row.
+- Long documents wrap once per change instead of several times per keystroke.
+- The open dialog appears before justwrite has looked inside the files to hide
+  the binary ones, so a slow disk or network share no longer freezes it, and
+  its highlight stays on the same file when binaries above it are hidden.
+- Recovering autosaved text no longer reads as saved after an undo, which
+  skipped the quit prompt and then deleted the only copy, and keeps the file's
+  CRLF line endings.
+- A file that is not valid UTF-8 is refused instead of being opened and
+  rewritten with replacement characters on save.
+- Pasted text has its line endings normalised, as a loaded file does, and its
+  control characters (escape sequences included) removed.
+- Saving under a new name removes the old name's autosave copy, and reloading
+  from the conflict panel removes the discarded edits' copy.
+- Saving a document opened through a symlink, even one whose target does not
+  exist yet, writes to the target and keeps the link.
 
 ## [0.2.0] - 2026-09-15
 
@@ -138,7 +132,8 @@ First release.
 - Packages for Linux, macOS and Windows, x86-64 and ARM: `.deb`, `.rpm`,
   `.tar.gz`, `.zip`.
 
-[Unreleased]: https://github.com/MawCeron/justwrite/compare/v0.2.0...develop
+[Unreleased]: https://github.com/MawCeron/justwrite/compare/v1.0.0...develop
+[1.0.0]: https://github.com/MawCeron/justwrite/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/MawCeron/justwrite/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/MawCeron/justwrite/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/MawCeron/justwrite/compare/v0.1.1...v0.1.2
