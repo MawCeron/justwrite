@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
 
 // noSel marks "no selection" in anchor. The document uses rune indexes
@@ -374,19 +377,21 @@ func (e *Editor) Backspace() {
 	if e.cursor == 0 {
 		return
 	}
-	r := e.buf[e.cursor-1]
-	e.buf = slices.Delete(e.buf, e.cursor-1, e.cursor)
-	e.cursor--
+	end := e.cursor
+	start, _ := e.cluster(end - 1)
+	gone := slices.Clone(e.buf[start:end])
+	e.buf = slices.Delete(e.buf, start, end)
+	e.cursor = start
 	e.Modified = true
 	e.redo = nil
 
-	if e.pendingDelete && e.pendingAt == e.cursor+1 {
-		e.pendingText = append([]rune{r}, e.pendingText...)
-		e.pendingAt = e.cursor
+	if e.pendingDelete && e.pendingAt == end {
+		e.pendingText = append(gone, e.pendingText...)
+		e.pendingAt = start
 		return
 	}
 	e.CommitPending()
-	e.pendingAt, e.pendingText, e.pendingDelete = e.cursor, []rune{r}, true
+	e.pendingAt, e.pendingText, e.pendingDelete = start, gone, true
 }
 
 func (e *Editor) DeleteForward() {
@@ -398,10 +403,11 @@ func (e *Editor) DeleteForward() {
 	if e.cursor >= len(e.buf) {
 		return
 	}
-	r := e.buf[e.cursor]
-	e.buf = slices.Delete(e.buf, e.cursor, e.cursor+1)
+	_, end := e.cluster(e.cursor)
+	text := string(e.buf[e.cursor:end])
+	e.buf = slices.Delete(e.buf, e.cursor, end)
 	e.Modified = true
-	e.push(editOp{at: e.cursor, text: string(r)})
+	e.push(editOp{at: e.cursor, text: text})
 }
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
@@ -446,14 +452,14 @@ func (e *Editor) landVertically(pos int) {
 func (e *Editor) MoveLeft(extend bool) {
 	e.beforeMove(extend, false)
 	if e.cursor > 0 {
-		e.cursor--
+		e.cursor, _ = e.cluster(e.cursor - 1)
 	}
 }
 
 func (e *Editor) MoveRight(extend bool) {
 	e.beforeMove(extend, false)
 	if e.cursor < len(e.buf) {
-		e.cursor++
+		_, e.cursor = e.cluster(e.cursor)
 	}
 }
 
@@ -530,6 +536,43 @@ func columnIn(vl VisualLine, col int) int {
 	return vl.Start + min(col, vl.End-vl.Start)
 }
 
+// cluster is the grapheme cluster holding the rune at i, as the rune indexes
+// [start, end) it spans. A cluster never crosses a newline, so only the line
+// is segmented.
+func (e *Editor) cluster(i int) (start, end int) {
+	ls, le := i, i
+	for ls > 0 && e.buf[ls-1] != '\n' {
+		ls--
+	}
+	for le < len(e.buf) && e.buf[le] != '\n' {
+		le++
+	}
+	if le == i { // the newline itself
+		return i, i + 1
+	}
+	rest := string(e.buf[ls:le])
+	for pos := ls; rest != ""; {
+		var c string
+		c, rest, _, _ = uniseg.FirstGraphemeClusterInString(rest, -1)
+		next := pos + utf8.RuneCountInString(c)
+		if i < next {
+			return pos, next
+		}
+		pos = next
+	}
+	return i, i + 1
+}
+
+// snap moves pos back to the start of the cluster it falls inside, for the
+// word movements, whose whitespace test knows nothing of clusters.
+func (e *Editor) snap(pos int) int {
+	if pos <= 0 || pos >= len(e.buf) {
+		return pos
+	}
+	start, _ := e.cluster(pos)
+	return start
+}
+
 // wordBoundaryLeft is where a word starts, scanning left from pos: past any
 // whitespace immediately before it, then past the word itself.
 func (e *Editor) wordBoundaryLeft(pos int) int {
@@ -539,7 +582,7 @@ func (e *Editor) wordBoundaryLeft(pos int) int {
 	for pos > 0 && !unicode.IsSpace(e.buf[pos-1]) {
 		pos--
 	}
-	return pos
+	return e.snap(pos)
 }
 
 func (e *Editor) WordLeft(extend bool) {
@@ -556,7 +599,7 @@ func (e *Editor) WordRight(extend bool) {
 	for pos < len(e.buf) && !unicode.IsSpace(e.buf[pos]) {
 		pos++
 	}
-	e.cursor = pos
+	e.cursor = e.snap(pos)
 }
 
 // DeleteWordLeft removes the word before the cursor as a single undo step —

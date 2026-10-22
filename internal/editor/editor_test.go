@@ -615,3 +615,58 @@ func TestSelectAllEndsTheGoalColumnRun(t *testing.T) {
 		t.Errorf("column %d after select all and two moves up, want 5 (where select all left the cursor)", col)
 	}
 }
+
+// The cursor, the selection and the deletions step over whole grapheme
+// clusters: landing inside one draws the block cursor on a zero-width rune and
+// splits the cluster across two styled runs.
+func TestCursorStepsByCluster(t *testing.T) {
+	// a, e + acute, a flag, a ZWJ family, b
+	text := "aé\U0001F1EB\U0001F1F7\U0001F468‍\U0001F469‍\U0001F467b"
+	want := []int{0, 1, 3, 5, 10, 11}
+	e := New()
+	e.SetText(text)
+
+	e.DocumentHome(false)
+	for _, w := range want[1:] {
+		e.MoveRight(false)
+		if e.cursor != w {
+			t.Fatalf("right: cursor = %d, want %d", e.cursor, w)
+		}
+	}
+	for i := len(want) - 2; i >= 0; i-- {
+		e.MoveLeft(false)
+		if e.cursor != want[i] {
+			t.Fatalf("left: cursor = %d, want %d", e.cursor, want[i])
+		}
+	}
+
+	e.MoveRight(true)
+	e.MoveRight(true)
+	if from, to, _ := e.Selection(); from != 0 || to != 3 {
+		t.Errorf("selection = %d..%d, want 0..3", from, to)
+	}
+}
+
+func TestDeletingTakesWholeClusters(t *testing.T) {
+	family := "\U0001F468‍\U0001F469‍\U0001F467"
+
+	e := New()
+	e.SetText("a" + family + "é")
+	e.Backspace() // é
+	e.Backspace() // the family
+	if got := e.Text(); got != "a" {
+		t.Errorf("after two backspaces = %q, want %q", got, "a")
+	}
+	e.Undo()
+	if got := e.Text(); got != "a"+family+"é" {
+		t.Errorf("undo = %q, want both clusters back", got)
+	}
+
+	e.SetText("é" + family + "b")
+	e.DocumentHome(false)
+	e.DeleteForward()
+	e.DeleteForward()
+	if got := e.Text(); got != "b" {
+		t.Errorf("after two deletes = %q, want %q", got, "b")
+	}
+}
