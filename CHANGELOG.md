@@ -9,6 +9,11 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The cursor, selection, Backspace and Delete step over whole grapheme
+  clusters, so a combining mark, flag or emoji family is never split.
+- Up and Down keep the cursor's column in cells, not runes, across CJK text
+  and tabs.
+- A document that shrinks to fit the window scrolls back to its first row.
 - The page is measured in terminal cells, not runes: CJK text, emoji
   (ZWJ sequences and flags included) and combining marks no longer overflow
   the page or throw off the cursor, the selection and the centring.

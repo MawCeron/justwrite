@@ -43,7 +43,7 @@ type Editor struct {
 	anchor int
 	crlf   bool // true if the loaded file used \r\n; Save() restores it
 
-	// goalCol is the column consecutive vertical moves try to return to, so
+	// goalCol is the column, in terminal cells, consecutive vertical moves try to return to, so
 	// passing through a short line does not permanently forget where a
 	// longer line above or below it was. noGoal until the first vertical
 	// move, and invalidated by anything that is not one.
@@ -430,14 +430,17 @@ func (e *Editor) beforeMove(extend, vertical bool) {
 
 // verticalCol is the column a vertical move should land on: the remembered
 // goal from an earlier vertical move in the same run, or the cursor's
-// current column when this is the first of the run — which becomes the goal
+// current column in cells when this is the first of the run — which becomes the goal
 // for whatever comes after it.
 //
 // Anything else that moves the cursor or edits the buffer ends the run too,
 // whether or not it remembers to say so: see goalAt.
 func (e *Editor) verticalCol(cur int, vlines []VisualLine) int {
 	if e.goalCol == noGoal || e.cursor != e.goalAt || len(e.buf) != e.goalLen {
-		e.goalCol = e.cursor - vlines[cur].Start
+		e.goalCol = 0
+		for _, w := range RowWidths(e.buf[vlines[cur].Start:e.cursor]) {
+			e.goalCol += w
+		}
 	}
 	return e.goalCol
 }
@@ -469,7 +472,7 @@ func (e *Editor) MoveUp(vlines []VisualLine, extend bool) {
 	if cur == 0 || len(vlines) == 0 {
 		return
 	}
-	e.landVertically(columnIn(vlines[cur-1], e.verticalCol(cur, vlines)))
+	e.landVertically(e.columnIn(vlines[cur-1], e.verticalCol(cur, vlines)))
 }
 
 func (e *Editor) MoveDown(vlines []VisualLine, extend bool) {
@@ -478,7 +481,7 @@ func (e *Editor) MoveDown(vlines []VisualLine, extend bool) {
 	if cur+1 >= len(vlines) {
 		return
 	}
-	e.landVertically(columnIn(vlines[cur+1], e.verticalCol(cur, vlines)))
+	e.landVertically(e.columnIn(vlines[cur+1], e.verticalCol(cur, vlines)))
 }
 
 func (e *Editor) Home(vlines []VisualLine, extend bool) {
@@ -517,7 +520,7 @@ func (e *Editor) PageUp(vlines []VisualLine, page int, extend bool) {
 	}
 	cur := e.CursorVisualLine(vlines)
 	col := e.verticalCol(cur, vlines)
-	e.landVertically(columnIn(vlines[max(cur-page, 0)], col))
+	e.landVertically(e.columnIn(vlines[max(cur-page, 0)], col))
 }
 
 func (e *Editor) PageDown(vlines []VisualLine, page int, extend bool) {
@@ -527,13 +530,27 @@ func (e *Editor) PageDown(vlines []VisualLine, page int, extend bool) {
 	}
 	cur := e.CursorVisualLine(vlines)
 	col := e.verticalCol(cur, vlines)
-	e.landVertically(columnIn(vlines[min(cur+page, len(vlines)-1)], col))
+	e.landVertically(e.columnIn(vlines[min(cur+page, len(vlines)-1)], col))
 }
 
-// columnIn keeps the wanted column when it fits, and clamps to the end of a
-// shorter line otherwise.
-func columnIn(vl VisualLine, col int) int {
-	return vl.Start + min(col, vl.End-vl.Start)
+// columnIn is the position on vl nearest the wanted cell column without going
+// past it: the column itself when the row reaches it, the end of a shorter
+// row otherwise. A wide character or a tab straddling the column is left
+// before, and a cluster is never entered.
+func (e *Editor) columnIn(vl VisualLine, col int) int {
+	widths := RowWidths(e.buf[vl.Start:vl.End])
+	pos, cells := vl.Start, 0
+	for pos < vl.End {
+		next := pos + 1
+		for next < vl.End && widths[next-vl.Start] == 0 {
+			next++
+		}
+		if cells += widths[pos-vl.Start]; cells > col {
+			break
+		}
+		pos = next
+	}
+	return pos
 }
 
 // cluster is the grapheme cluster holding the rune at i, as the rune indexes

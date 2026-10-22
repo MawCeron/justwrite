@@ -670,3 +670,42 @@ func TestDeletingTakesWholeClusters(t *testing.T) {
 		t.Errorf("after two deletes = %q, want %q", got, "b")
 	}
 }
+
+// Vertical moves keep the cursor's column in cells, not runes: a CJK
+// character takes two and a tab runs to the next stop, so counting runes
+// drifted the cursor sideways between rows of different text.
+func TestVerticalMovesKeepTheCellColumn(t *testing.T) {
+	cellCol := func(e *Editor) int {
+		vl := e.VisualLines(80)
+		n := 0
+		for _, w := range RowWidths(e.buf[vl[e.CursorVisualLine(vl)].Start:e.cursor]) {
+			n += w
+		}
+		return n
+	}
+	tests := []struct {
+		name, text string
+		from       int // cursor, in runes
+		want       int // cell column after Down
+	}{
+		{"CJK onto ASCII", "你好世界\nabcdefgh", 3, 6},
+		{"ASCII onto CJK", "abcdef\n你好世界", 6, 6},
+		{"CJK wide char straddles the column", "abc\n你好", 3, 2},
+		{"onto a tab-indented row", "abcdefgh\n\tabcdefgh", 4, 4},
+		{"off a tab-indented row", "\tabcdefgh\nabcdefgh", 1, 4},
+		{"onto a shorter row", "abcdefgh\nab", 6, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := New()
+			e.SetText(tt.text)
+			e.SetCursor(tt.from)
+
+			e.MoveDown(e.VisualLines(80), false)
+
+			if got := cellCol(e); got != tt.want {
+				t.Errorf("cell column = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
