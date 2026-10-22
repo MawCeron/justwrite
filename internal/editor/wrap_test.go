@@ -120,6 +120,19 @@ func TestAdjustScroll(t *testing.T) {
 			t.Errorf("Scroll = %d, want %d", e.Scroll, want)
 		}
 	})
+
+	t.Run("a document that shrinks to fit scrolls back to the top", func(t *testing.T) {
+		e := New()
+		e.SetText(strings.Repeat("x\n", 5)) // 6 rows in a 10-row viewport
+		e.Scroll = 40
+		e.cursor = e.Len()
+
+		e.AdjustScroll(e.VisualLines(20), height)
+
+		if e.Scroll != 0 {
+			t.Errorf("Scroll = %d, want 0", e.Scroll)
+		}
+	})
 }
 
 // Rows are measured in terminal cells, not runes: a CJK character takes two,

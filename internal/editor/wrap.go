@@ -167,10 +167,10 @@ func (e *Editor) AdjustScroll(vlines []VisualLine, height int) {
 	if cur+scrollMargin >= e.Scroll+height {
 		e.Scroll = min(max(cur+scrollMargin+1-height, 0), len(vlines)-1)
 	}
-	// Never leave blank rows below the last line when the document fills the
-	// viewport.
-	if e.Scroll+height > len(vlines) && len(vlines) >= height {
-		e.Scroll = len(vlines) - height
+	// Never leave blank rows below the last line. A document that fits has
+	// nothing to scroll, so an offset left from when it was longer goes too.
+	if e.Scroll+height > len(vlines) {
+		e.Scroll = max(len(vlines)-height, 0)
 	}
 	e.Scroll = max(e.Scroll, 0)
 }
