@@ -4,7 +4,6 @@ import (
 	"slices"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 )
 
@@ -35,8 +34,9 @@ func clusterWidths(rs []rune) []int {
 	widths := make([]int, len(rs))
 	for s, i := string(rs), 0; s != ""; {
 		var cluster string
-		cluster, s, _, _ = uniseg.FirstGraphemeClusterInString(s, -1)
-		widths[i] = ansi.StringWidth(cluster)
+		var w int
+		cluster, s, w, _ = uniseg.FirstGraphemeClusterInString(s, -1)
+		widths[i] = w
 		i += utf8.RuneCountInString(cluster)
 	}
 	return widths
