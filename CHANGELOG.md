@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-02
+
+### Fixed
+
+- The open dialog no longer hangs on a named pipe, socket or device in the
+  directory, and binary files beside them are still hidden. A file on a slow
+  or hung mount only delays the few files read with it.
+- The autosave copy is removed by the save itself, whichever way the document
+  is saved, so a stale copy can no longer be offered for recovery.
+- Typing into a very long document is about a quarter faster.
+
 ## [1.0.0] - 2026-10-22
 
 ### Fixed
@@ -132,7 +143,8 @@ First release.
 - Packages for Linux, macOS and Windows, x86-64 and ARM: `.deb`, `.rpm`,
   `.tar.gz`, `.zip`.
 
-[Unreleased]: https://github.com/MawCeron/justwrite/compare/v1.0.0...develop
+[Unreleased]: https://github.com/MawCeron/justwrite/compare/v1.0.1...develop
+[1.0.1]: https://github.com/MawCeron/justwrite/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MawCeron/justwrite/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/MawCeron/justwrite/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/MawCeron/justwrite/compare/v0.1.2...v0.1.3
