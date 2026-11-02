@@ -872,3 +872,29 @@ func TestSaveCreatesTheTargetOfADanglingSymlink(t *testing.T) {
 		t.Errorf("target holds %q, want x", b)
 	}
 }
+
+// Every way of saving leaves no stale swap behind.
+func TestEverySaveRemovesTheSwap(t *testing.T) {
+	saves := map[string]func(e *Editor, dir string) error{
+		"Save":      func(e *Editor, _ string) error { return e.Save() },
+		"ForceSave": func(e *Editor, _ string) error { return e.ForceSave() },
+		"SaveAs":    func(e *Editor, dir string) error { return e.SaveAs(filepath.Join(dir, "otra.md")) },
+	}
+	for name, save := range saves {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			e := New()
+			e.Path = filepath.Join(dir, "nota.md")
+			e.SetText("borrador")
+			if err := e.WriteSwap(); err != nil {
+				t.Fatal(err)
+			}
+			if err := save(e, dir); err != nil {
+				t.Fatal(err)
+			}
+			if swaps, _ := filepath.Glob(filepath.Join(dir, ".*.swp")); len(swaps) != 0 {
+				t.Errorf("swap files left after %s: %v", name, swaps)
+			}
+		})
+	}
+}

@@ -103,8 +103,7 @@ func TestPreview(t *testing.T) {
 
 	dialog := scene()
 	dialog.mode = ModeOpen
-	dialog.exp.refresh(fixtureDir(t), "")
-	dialog.exp.markBinary(dialog.exp.sniff()().(sniffed)) // the app does this on the next message
+	applySniff(&dialog.exp, dialog.exp.refresh(fixtureDir(t), "")) // the app does this on the next message
 	// The listing is real, read off disk. Only the label is staged: the true
 	// path is a throwaway temp directory, and putting it on camera would both
 	// look like noise and publish somebody's home directory layout.

@@ -123,6 +123,7 @@ func (e *Editor) writeFile() error {
 	e.saved = e.currentSeq()
 	e.Modified = false
 	e.refreshLoadedStat()
+	e.RemoveSwap() // a real save needs no recovery next time
 	return nil
 }
 

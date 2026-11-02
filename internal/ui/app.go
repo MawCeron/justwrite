@@ -481,7 +481,6 @@ func (a *App) saveNow() tea.Cmd {
 		return a.failed(err)
 	}
 	a.recordState()
-	a.ed.RemoveSwap() // a clean save needs no recovery next time
 	return a.posted("saved")
 }
 
@@ -502,7 +501,6 @@ func (a *App) saveTo(path string) tea.Cmd {
 	}
 	a.mode = ModeWrite
 	a.recordState()
-	a.ed.RemoveSwap()
 	return a.posted("saved")
 }
 
@@ -550,14 +548,13 @@ func (a App) startDir() string {
 }
 
 func (a *App) openDialog() tea.Cmd {
-	a.exp.refresh(a.startDir(), "")
+	cmd := a.exp.refresh(a.startDir(), "")
 	a.mode = ModeOpen
-	return a.exp.sniff()
+	return cmd
 }
 
 func (a *App) saveAsDialog() tea.Cmd {
-	a.exp.refresh(a.startDir(), "")
-	sniff := a.exp.sniff()
+	sniff := a.exp.refresh(a.startDir(), "")
 	suggested := ""
 	if a.ed.Path != "" {
 		suggested = filepath.Base(a.ed.Path)
@@ -590,8 +587,7 @@ func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
 		case a.exp.filter != "":
 			a.exp.setFilter("")
 		case a.exp.recent:
-			a.exp.refresh(a.exp.dir, "")
-			cmd = a.exp.sniff()
+			cmd = a.exp.refresh(a.exp.dir, "")
 		default:
 			a.mode = ModeWrite
 		}
@@ -599,8 +595,7 @@ func (a App) keyOpen(msg tea.KeyMsg) (App, tea.Cmd) {
 		return a.enterSelection(false)
 	case "ctrl+r":
 		if a.exp.recent {
-			a.exp.refresh(a.exp.dir, "")
-			cmd = a.exp.sniff()
+			cmd = a.exp.refresh(a.exp.dir, "")
 		} else {
 			a.exp.refreshRecent(recentEntries(a.st))
 		}
@@ -679,8 +674,7 @@ func (a App) enterSelection(naming bool) (App, tea.Cmd) {
 		if it.isUp {
 			focus = filepath.Base(a.exp.dir) // land on the directory just left
 		}
-		a.exp.refresh(it.path, focus)
-		return a, a.exp.sniff()
+		return a, a.exp.refresh(it.path, focus)
 	}
 
 	if naming {
@@ -774,7 +768,6 @@ func (a App) keyConflict(msg tea.KeyMsg) (App, tea.Cmd) {
 			return a, a.failed(err)
 		}
 		a.recordState()
-		a.ed.RemoveSwap()
 		return a, a.posted("saved")
 	case "s":
 		a.mode = ModeWrite
