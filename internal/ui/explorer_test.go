@@ -2,10 +2,12 @@ package ui
 
 import (
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -42,8 +44,7 @@ func names(e *explorer) []string {
 // what anyone came here to write. Both stay out of the way until asked for.
 func TestNoiseIsHiddenUntilAskedFor(t *testing.T) {
 	var e explorer
-	e.refresh(sampleDir(t), "")
-	e.markBinary(e.sniff()().(sniffed))
+	applySniff(&e, e.refresh(sampleDir(t), ""))
 
 	got := strings.Join(names(&e), " ")
 	for _, unwanted := range []string{".oculto", "imagen.png"} {
@@ -191,12 +192,10 @@ func TestSniffHidesBinariesAfterTheListingIsUp(t *testing.T) {
 		e.all = append(e.all, entry{name: name, path: filepath.Join(dir, name)})
 	}
 	e.apply()
-	msg := e.sniff()().(sniffed)
-	e.markBinary(msg)
-
-	if len(msg.binary) != 1 || !msg.binary[filepath.Join(dir, "imagen.png")] {
-		t.Errorf("sniffed %v, want just imagen.png", msg.binary)
+	for i := range e.all {
+		e.all[i].sniffable = true
 	}
+	applySniff(&e, e.sniff())
 	if got := strings.Join(names(&e), " "); got != "alpha.md gamma.txt" {
 		t.Errorf("listing = %q, want the binary hidden", got)
 	}
@@ -237,5 +236,48 @@ func TestSniffResultForAnotherDirectoryIsIgnored(t *testing.T) {
 
 	if len(e.shown) != before {
 		t.Errorf("a stale result changed the listing: %d rows, want %d", len(e.shown), before)
+	}
+}
+
+// applySniff runs a sniff command the way the app would: every batch it
+// reports is fed back to markBinary.
+func applySniff(e *explorer, cmd tea.Cmd) {
+	var run func(tea.Cmd)
+	run = func(c tea.Cmd) {
+		if c == nil {
+			return
+		}
+		switch m := c().(type) {
+		case tea.BatchMsg:
+			for _, sub := range m {
+				run(sub)
+			}
+		case sniffed:
+			e.markBinary(m)
+		}
+	}
+	run(cmd)
+}
+
+// A named pipe blocks open() until someone writes to it. The sniff must not
+// touch it, and must still hide the PNG beside it.
+func TestSniffSkipsPipesAndStillHidesBinaries(t *testing.T) {
+	dir := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(dir, "pipe"), 0o644); err != nil {
+		t.Skip("no mkfifo:", err)
+	}
+	os.WriteFile(filepath.Join(dir, "a.md"), []byte("hola"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.png"), []byte("\x89PNG\x00\x00"), 0o644)
+
+	var e explorer
+	done := make(chan struct{})
+	go func() { applySniff(&e, e.refresh(dir, "")); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("sniff blocked on the named pipe")
+	}
+	if got := strings.Join(names(&e), " "); strings.Contains(got, "b.png") || !strings.Contains(got, "a.md") {
+		t.Errorf("listing = %q, want a.md without b.png", got)
 	}
 }

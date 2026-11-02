@@ -19,12 +19,13 @@ import (
 const maxRecentFiles = 10
 
 type entry struct {
-	name   string // shown as-is, with a trailing / for directories
-	path   string
-	isDir  bool
-	isUp   bool
-	noise  bool // hidden or binary: out of the way unless asked for
-	recent bool // a path from elsewhere, not a name in the current directory
+	name      string // shown as-is, with a trailing / for directories
+	path      string
+	isDir     bool
+	isUp      bool
+	noise     bool // hidden or binary: out of the way unless asked for
+	sniffable bool // might be a regular file: worth opening to look for binary content
+	recent    bool // a path from elsewhere, not a name in the current directory
 }
 
 // explorer is the directory listing behind the open and save dialogs.
@@ -40,11 +41,11 @@ type explorer struct {
 	total   int  // entries before the filter, for the counter
 }
 
-// refresh reads dir, without opening any file in it: the caller sends sniff's
-// command to hide the binary ones. focus is the name to put the cursor on, which is how
+// refresh reads dir, without opening any file in it, and returns the command
+// that sniffs the files for binary content to hide. focus is the name to put the cursor on, which is how
 // stepping up to the parent lands on the directory you just came out of
 // instead of dumping you at the top of the list.
-func (e *explorer) refresh(dir, focus string) {
+func (e *explorer) refresh(dir, focus string) tea.Cmd {
 	abs, err := filepath.Abs(dir)
 	if err == nil {
 		dir = abs
@@ -68,7 +69,11 @@ func (e *explorer) refresh(dir, focus string) {
 			continue
 		}
 		// Binary files are hidden once sniff reports back; until then they list.
-		files = append(files, entry{name: it.Name(), path: p, noise: hidden})
+		// A FIFO, socket or device would block the sniff's open(); a symlink
+		// may point at one, so the sniff itself checks where it leads.
+		t := it.Type()
+		files = append(files, entry{name: it.Name(), path: p, noise: hidden,
+			sniffable: t.IsRegular() || t&os.ModeSymlink != 0})
 	}
 
 	byName := func(s []entry) {
@@ -83,6 +88,7 @@ func (e *explorer) refresh(dir, focus string) {
 	e.all = append(e.all, files...)
 	e.apply()
 	e.focusOn(focus)
+	return e.sniff()
 }
 
 // sniffed carries the result of sniffing one directory's files for binary
@@ -92,26 +98,41 @@ type sniffed struct {
 	binary map[string]bool // by path
 }
 
-// sniff reads every file in the listing once, off the UI thread, and reports
-// which ones look binary. A slow disk or a network share stalls this command,
-// not the keystroke that opened the directory.
+// sniffBatch is how many files one sniff command reads: a file on a hung mount
+// stalls its batch, not the whole directory.
+const sniffBatch = 16
+
+// sniff reads the listing's regular files off the UI thread, in concurrent
+// batches, and reports each batch's binaries as it finishes.
 func (e *explorer) sniff() tea.Cmd {
 	dir := e.dir
+	var cmds []tea.Cmd
 	var paths []string
-	for _, it := range e.all {
-		if !it.isDir && !it.noise {
-			paths = append(paths, it.path)
+	flush := func() {
+		if len(paths) == 0 {
+			return
 		}
+		batch := paths
+		paths = nil
+		cmds = append(cmds, func() tea.Msg {
+			binary := map[string]bool{}
+			for _, p := range batch {
+				if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && editor.IsBinary(p) {
+					binary[p] = true
+				}
+			}
+			return sniffed{dir: dir, binary: binary}
+		})
 	}
-	return func() tea.Msg {
-		binary := map[string]bool{}
-		for _, p := range paths {
-			if editor.IsBinary(p) {
-				binary[p] = true
+	for _, it := range e.all {
+		if it.sniffable && !it.isDir && !it.noise {
+			if paths = append(paths, it.path); len(paths) == sniffBatch {
+				flush()
 			}
 		}
-		return sniffed{dir: dir, binary: binary}
 	}
+	flush()
+	return tea.Batch(cmds...)
 }
 
 // markBinary applies a sniff result to the listing, unless it has moved on
