@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Symlinks to directories are listed as folders and can be entered in the open
+  and save dialogs.
+
 ## [1.0.1] - 2026-11-02
 
 ### Fixed

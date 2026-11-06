@@ -64,7 +64,13 @@ func (e *explorer) refresh(dir, focus string) tea.Cmd {
 	for _, it := range items {
 		p := filepath.Join(dir, it.Name())
 		hidden := strings.HasPrefix(it.Name(), ".")
-		if it.IsDir() {
+		isDir := it.IsDir()
+		if it.Type()&os.ModeSymlink != 0 {
+			if info, err := os.Stat(p); err == nil {
+				isDir = info.IsDir()
+			}
+		}
+		if isDir {
 			dirs = append(dirs, entry{name: it.Name() + "/", path: p, isDir: true, noise: hidden})
 			continue
 		}
